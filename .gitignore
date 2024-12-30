@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyd
+*.pyo
+*.pyc
+
+
+# macOS
+.DS_Store
+
+
+.venv/
