@@ -3,7 +3,6 @@ from game import (
     GameState,
     PIECE_COUNT,
     STATE_WAITING_FOR_GRADUATION_CHOICE,
-    STATE_WAITING_FOR_PLACEMENT,
 )
 
 
@@ -136,15 +135,15 @@ class TestBoopGraduation(unittest.TestCase):
         self.game.board[3][2] = "gk"
 
         self.game.available_pieces["gk"] -= 3
-
+        self.game.current_turn = "gray"
         # Place a piece to trigger graduation
-        self.game.place_piece("ok", (5, 5))
+        self.game.place_piece("gk", (5, 5))
 
         # Check if the Kittens are graduated to Cats
         self.assertEqual(self.game.board[1][2], None)
         self.assertEqual(self.game.board[2][2], None)
         self.assertEqual(self.game.board[3][2], None)
-        self.assertEqual(self.game.available_pieces["gk"], PIECE_COUNT - 3)
+        self.assertEqual(self.game.available_pieces["gk"], PIECE_COUNT - 4)
         self.assertEqual(self.game.available_pieces["gc"], 3)
         self.assertEqual(self.game.graduated_count["gc"], 3)
 
@@ -215,15 +214,14 @@ class TestBoopGraduation(unittest.TestCase):
 
         self.game.available_pieces["gk"] -= 3
         self.game.graduated_count["gc"] = 1
-
+        self.game.current_turn = "gray"
         # Place a piece to trigger graduation
-        self.game.place_piece("ok", (5, 5))
-
+        self.game.place_piece("gk", (5, 5))
         # Check if the Kittens are graduated to Cats
         self.assertEqual(self.game.board[1][1], None)
         self.assertEqual(self.game.board[2][2], None)
         self.assertEqual(self.game.board[3][3], None)
-        self.assertEqual(self.game.available_pieces["gk"], PIECE_COUNT - 3)
+        self.assertEqual(self.game.available_pieces["gk"], PIECE_COUNT - 4)
         self.assertEqual(self.game.available_pieces["gc"], 3)
         self.assertEqual(self.game.graduated_count["gc"], 3)
 
@@ -327,7 +325,7 @@ class TestGraduationChoices(unittest.TestCase):
         self.game.place_piece("ok", (2, 2))
 
         self.assertEqual(self.game.state_mode, STATE_WAITING_FOR_GRADUATION_CHOICE)
-        expected_grad_choices = [((2, 0), (2, 1), (2, 2)), ((0, 2), (1, 2), (2, 2))]
+        expected_grad_choices = [((0, 2), (1, 2), (2, 2)), ((2, 0), (2, 1), (2, 2))]
         self.assertEqual(self.game.graduation_choices, expected_grad_choices)
 
     def test_choose_graduation_orange_kitten_more(self):
@@ -360,11 +358,11 @@ class TestGraduationChoices(unittest.TestCase):
             ((2, 3),),
             ((2, 4),),
             ((3, 2),),
-            ((2, 2), (2, 3), (2, 4)),
+            ((0, 2), (1, 2), (2, 2)),
+            ((1, 2), (2, 2), (3, 2)),
             ((2, 0), (2, 1), (2, 2)),
             ((2, 1), (2, 2), (2, 3)),
-            ((1, 2), (2, 2), (3, 2)),
-            ((0, 2), (1, 2), (2, 2)),
+            ((2, 2), (2, 3), (2, 4)),
         ]
         self.assertEqual(self.game.graduation_choices, expected_grad_choices)
 
@@ -391,6 +389,41 @@ class TestGraduationChoices(unittest.TestCase):
         # Check if the graduation choices are correct
         expected_choices = [((2, 1), (2, 2), (2, 3)), ((3, 1), (3, 2), (3, 3))]
         self.assertEqual(self.game.graduation_choices, expected_choices)
+
+    def test_a_bunch_of_graduation_choices(self):
+        # Set up the board with two possible graduation choices for Orange
+
+        self.game.board = [
+            ["ok", None, None, None, None, None],
+            [None, "ok", None, "ok", None, None],
+            [None, None, "ok", None, None, None],
+            [None, "ok", "ok", "ok", None, None],
+            [None, None, None, None, None, None],
+            [None, None, None, "ok", None, None],
+        ]
+
+        self.game.available_pieces["ok"] -= 8
+
+        self.game.calculate_graduation_choices()
+
+        # Check if the graduation choices are correct
+        self.assertEqual(
+            self.game.graduation_choices,
+            [
+                ((0, 0),),
+                ((1, 1),),
+                ((1, 3),),
+                ((2, 2),),
+                ((3, 1),),
+                ((3, 2),),
+                ((3, 3),),
+                ((5, 3),),
+                ((0, 0), (1, 1), (2, 2)),
+                ((1, 1), (2, 2), (3, 3)),
+                ((1, 3), (2, 2), (3, 1)),
+                ((3, 1), (3, 2), (3, 3)),
+            ],
+        )
 
 
 if __name__ == "__main__":

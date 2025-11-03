@@ -1,18 +1,8 @@
-from util import generate_random_game_state
-from ui import GameUI
+from boop.util import generate_random_game_state
+from boop.ui import GameUI
 import pygame
 import sys
 import logging
-
-# Colors
-LIGHT_BLUE = (173, 216, 230)
-LIGHTER_BLUE = (224, 255, 255)
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-ORANGE_KITTEN_COLOR = (255, 165, 0)  # Orange for Orange Kittens
-GRAY_KITTEN_COLOR = (169, 169, 169)  # Gray for Gray Kittens
-ORANGE_CAT_COLOR = (255, 69, 0)  # Darker Orange for Orange Cats
-GRAY_CAT_COLOR = (105, 105, 105)  # Darker Gray for Gray Cats
 
 
 def main():

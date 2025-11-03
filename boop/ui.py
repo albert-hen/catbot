@@ -2,6 +2,8 @@ import logging
 import pygame
 import copy
 
+from game import STATE_WAITING_FOR_GRADUATION_CHOICE
+
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -67,6 +69,7 @@ class GameUI:
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Boop Game")
         self.font = pygame.font.SysFont(None, FONT_SIZE)
+        self.small_font = pygame.font.SysFont(None, FONT_SIZE // 2)
         self.selected_piece_type = {"orange": "ok", "gray": "gk"}  # Default selections
         self.create_buttons()
         self.history = []
@@ -88,8 +91,6 @@ class GameUI:
         self.orange_kitten_img = kittens_sheet.subsurface((75, 0, 75, 75))
         self.gray_cat_img = cats_sheet.subsurface((0, 0, 75, 75))
         self.orange_cat_img = cats_sheet.subsurface((75, 0, 75, 75))
-        print("HI WE ARE LOADING SPRITS")
-        print(self.gray_kitten_img)
 
     def create_buttons(self):
         self.buttons = [
@@ -155,6 +156,25 @@ class GameUI:
                 logging.debug("Undo key pressed")
                 self.undo_move()
 
+            # Handle graduation choice selection via number keys (0-9)
+            if pygame.K_0 <= event.key <= pygame.K_9:
+                if (
+                    self.game_state.state_mode != STATE_WAITING_FOR_GRADUATION_CHOICE
+                    and not self.game_state.graduation_choices
+                ):
+                    logging.debug(
+                        "Not in graduation choice mode or no choices available."
+                    )
+                    return
+                idx = event.key - pygame.K_0
+                choices = self.game_state.graduation_choices
+
+                if 0 <= idx < len(choices):
+                    logging.debug(f"Graduation choice {idx} selected: {choices[idx]}")
+                    self.process_graduation_choice(choices[idx])
+                else:
+                    logging.debug(f"Invalid graduation choice index: {idx}")
+
     def get_board_position(self, mouse_pos):
         # Convert mouse click to board position
         col = mouse_pos[0] // SQUARE_SIZE
@@ -163,11 +183,18 @@ class GameUI:
             return row, col
         return None
 
+    def process_graduation_choice(self, choices):
+        old_state = copy.deepcopy(self.game_state)
+        self.game_state.choose_graduation(choices)
+        self.history.append(old_state)
+
     def process_move(self, board_pos):
         current_piece_type = self.selected_piece_type[self.game_state.current_turn]
+        """
         logging.debug(
             f"Processing move at position {board_pos} with piece type {current_piece_type}"
         )
+        """
         # Save the current state to history before making a move
         old_state = copy.deepcopy(self.game_state)
 
@@ -293,6 +320,50 @@ class GameUI:
         # Draw piece selection buttons
         self.draw_piece_selection_buttons()
 
+        # display graduation_choices
+        self.render_graduation_options(y_offset)
+
+        # display game over if applicable
+        self.render_game_over()
+
+    def render_graduation_options(self, y_offset):
+        graduation_choices = self.game_state.graduation_choices
+        for i, choice in enumerate(graduation_choices):
+            choice_text = self.small_font.render(
+                f"{i} {choice}",
+                True,
+                BLACK,
+            )
+            # hopfully there will be <=10 choices
+            self.screen.blit(choice_text, (BOARD_WIDTH + MARGIN, y_offset))
+            y_offset += FONT_SIZE / 2 + TEXT_PADDING
+
     def draw_piece_selection_buttons(self):
         for button in self.buttons:
             button.draw(self.screen)
+
+    def render_game_over(self):
+        if not self.game_state.game_over:
+            return
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        overlay.set_alpha(200)
+        overlay.fill(WHITE)
+        self.screen.blit(overlay, (0, 0))
+
+        game_over_text = self.font.render("Game Over!", True, BLACK)
+        winner_text = self.font.render(f"Winner: {self.game_state.winner}", True, BLACK)
+
+        self.screen.blit(
+            game_over_text,
+            (
+                (WINDOW_WIDTH - game_over_text.get_width()) // 2,
+                WINDOW_HEIGHT // 2 - FONT_SIZE,
+            ),
+        )
+        self.screen.blit(
+            winner_text,
+            (
+                (WINDOW_WIDTH - winner_text.get_width()) // 2,
+                WINDOW_HEIGHT // 2 + TEXT_PADDING,
+            ),
+        )

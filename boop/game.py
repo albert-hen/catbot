@@ -108,13 +108,18 @@ class GameState:
         if self.game_over:
             raise ValueError("Game is already over.")
 
-        if self.board[position[0]][position[1]] is not None:
-            raise ValueError("Board postion is already occupied.")
-
         if self.state_mode == STATE_WAITING_FOR_GRADUATION_CHOICE:
             raise ValueError(
                 f"Game is waiting for graduation choice from {self.current_turn}."
             )
+
+        if piece_type in ["ok", "oc"] and self.current_turn != "orange":
+            raise ValueError("It's not orange's turn.")
+        if piece_type in ["gk", "gc"] and self.current_turn != "gray":
+            raise ValueError("It's not gray's turn.")
+
+        if self.board[position[0]][position[1]] is not None:
+            raise ValueError("Board postion is already occupied.")
 
         if self.available_pieces[piece_type] == 0:
             raise ValueError("No more pieces of this type available.")
@@ -128,25 +133,31 @@ class GameState:
 
         # Check for win condition
         self.check_for_win()
+        if self.game_over:
+            return
 
-        # Check for graduation of Kittens to Cats
-        graduation_choices = [
-            (pos,) for pos in self.get_grad_options_eight()
-        ] + self.get_grad_options_three()
+        # Check for graduation of Kittens to Cats and save the choices to self.graduation_choices
+        self.calculate_graduation_choices()
 
-        if len(graduation_choices) == 1:
+        if len(self.graduation_choices) == 1:
             # only one graduation choice, perform it, switch turn
-            self.perform_graduation(graduation_choices[0])
+            self.perform_graduation(self.graduation_choices[0])
+            # clear it so we don't show in ui
+            self.graduation_choices = []
             self.switch_turn()
-        elif len(graduation_choices) > 1:
+        elif len(self.graduation_choices) > 1:
             # update game state to waiting for graduation choice, no switch turn
-            self.graduation_choices = graduation_choices
             self._clear_valid_moves()
             logging.debug("Waiting for graduation choice from %s.", self.current_turn)
             self.state_mode = STATE_WAITING_FOR_GRADUATION_CHOICE
         else:
             # no graduation choices, switch turn
             self.switch_turn()
+
+    def calculate_graduation_choices(self):
+        self.graduation_choices = [
+            (pos,) for pos in self.get_grad_options_eight()
+        ] + self.get_grad_options_three()
 
     def _clear_valid_moves(self):
         """
@@ -173,9 +184,12 @@ class GameState:
             raise ValueError("Game is not waiting for graduation choice.")
 
         if choice not in self.graduation_choices:
-            raise ValueError("Invalid graduation choice.")
+            raise ValueError(
+                f"Invalid graduation choice: {choice}. Available choices: {self.graduation_choices}"
+            )
 
         self.perform_graduation(choice)
+        self.graduation_choices = []
         self.switch_turn()
 
     def boop_pieces(self, position):
@@ -304,7 +318,7 @@ class GameState:
         Checks if any pieces can be graduated that are in a three in a row. Returns a
         list of tuples of positions of pieces that can be graduated.
         """
-        graduation_choices = set()
+        graduation_choices = list()
         # Define the directions to check for lines (horizontal, vertical, diagonal)
         directions = [
             (0, 1),  # Horizontal
@@ -328,6 +342,9 @@ class GameState:
                 if self.board[row][col] in ["ok", "gk", "oc", "gc"]:
                     current_piece = self.board[row][col]
                     current_color = get_piece_color(current_piece)
+                    # Only check for lines of the current player's color
+                    if current_color != self.current_turn:
+                        continue
                     # Check for lines in all directions
                     for direction in directions:
                         positions = [(row, col)]
@@ -351,8 +368,8 @@ class GameState:
                             logging.debug(
                                 "Graduation detected at positions: %s", positions
                             )
-                            graduation_choices.add(tuple(positions))
-        return list(graduation_choices)
+                            graduation_choices.append(tuple(positions))
+        return graduation_choices
 
     def update_valid_moves(self):
         """
