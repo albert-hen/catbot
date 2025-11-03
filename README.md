@@ -32,12 +32,12 @@ python3 -m boop.main
 
 To run unit tests:
 ```bash
-python3 -m unittest boop/test_game.py
+python3 -m unittest boop.tests.test_game
 ```
 
 ## Running Demo Scripts
 
-To run a demo (e.g., eight-cat win condition):
+To run a demo (e.g., random game):
 ```bash
-python3 -m boop.demo.demo_eight_cat_win
+python3 -m boop.demo.demo_random_game_state_ui
 ```

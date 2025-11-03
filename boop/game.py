@@ -41,6 +41,7 @@ class GameState:
 
         self.state_mode = STATE_WAITING_FOR_PLACEMENT
 
+        # these caches are not used by game logic, only for player (ui or agent) convienience
         # calculated everytime the state mode becomes waiting_for_placement
         # treat as a cache of valid moves, can always be derived from the state
         self.placeable_pieces = []
@@ -472,7 +473,7 @@ class GameState:
         Switches the turn between players. Toggles `current_turn` between "gray" and
         "orange". Updates valid moves and sets the state mode to waiting for placement.
         """
+        self.current_turn = "gray" if self.current_turn == "orange" else "orange"
         self.state_mode = STATE_WAITING_FOR_PLACEMENT
         self.update_valid_moves()
-        self.current_turn = "gray" if self.current_turn == "orange" else "orange"
         logging.debug("Switched turn to: %s", self.current_turn)

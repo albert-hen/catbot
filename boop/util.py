@@ -1,5 +1,5 @@
 import random
-from game import GameState
+from boop.game import GameState
 
 
 def generate_random_game_state():
