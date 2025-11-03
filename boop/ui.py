@@ -1,8 +1,8 @@
 import logging
 import pygame
 import copy
-
-from game import STATE_WAITING_FOR_GRADUATION_CHOICE
+import os
+from boop.game import STATE_WAITING_FOR_GRADUATION_CHOICE
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -83,8 +83,12 @@ class GameUI:
         self.load_assets()
 
     def load_assets(self):
-        kittens_sheet = pygame.image.load("assets/kittens.png").convert_alpha()
-        cats_sheet = pygame.image.load("assets/cats.png").convert_alpha()
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        kittens_path = os.path.join(base_dir, "assets", "kittens.png")
+        cats_path = os.path.join(base_dir, "assets", "cats.png")
+
+        kittens_sheet = pygame.image.load(kittens_path).convert_alpha()
+        cats_sheet = pygame.image.load(cats_path).convert_alpha()
 
         # Extract individual sprites
         self.gray_kitten_img = kittens_sheet.subsurface((0, 0, 75, 75))
