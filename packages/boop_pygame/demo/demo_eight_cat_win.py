@@ -1,21 +1,21 @@
-from boop.game import GameState
-from boop.ui import GameUI
+from packages.boop_core.game import GameState
+from ..ui import GameUI
 import pygame
 import sys
 
 
 def main():
     gs = GameState()
-    # Populate the board with 7 gray kittens to trigger the 8-on-board graduation
+    # Populate the board with 7 orange cats to test the 8-on-board win condition
     gs.board = [
-        ["gk", "gk", "gk", "gk", "gk", "gk"],
-        ["gk", None, None, None, None, None],
+        ["oc", "oc", "oc", "oc", "oc", "oc"],
+        ["oc", None, None, None, None, None],
         [None, None, None, None, None, None],
         [None, None, None, None, None, None],
         [None, None, None, None, None, None],
         [None, None, None, None, None, None],
     ]
-    gs.available_pieces["gk"] = gs.available_pieces["gk"] - 7
+    gs.available_pieces["oc"] = 1  # 1 orange cat left in the pool
     ui = GameUI(game_state=gs)
     while True:
         for event in pygame.event.get():

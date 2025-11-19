@@ -2,7 +2,7 @@ import logging
 import pygame
 import copy
 import os
-from boop.game import STATE_WAITING_FOR_GRADUATION_CHOICE
+from packages.boop_core.game import STATE_WAITING_FOR_GRADUATION_CHOICE
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)

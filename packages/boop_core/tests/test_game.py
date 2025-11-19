@@ -1,5 +1,5 @@
 import unittest
-from boop.game import (
+from ..game import (
     GameState,
     PIECE_COUNT,
     STATE_WAITING_FOR_GRADUATION_CHOICE,

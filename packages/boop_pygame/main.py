@@ -1,13 +1,11 @@
-from boop.util import generate_random_game_state
-from boop.ui import GameUI
+from .ui import GameUI
+from packages.boop_core.game import GameState
 import pygame
 import sys
-import logging
 
 
 def main():
-    ui = GameUI(game_state=generate_random_game_state())
-    logging.debug("Game generated: %s", ui.game_state)
+    ui = GameUI(game_state=GameState())
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:

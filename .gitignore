@@ -9,3 +9,19 @@ __pycache__/
 .DS_Store
 
 .venv/
+
+
+.DS_Store
+
+/temp/
+/.project
+/.pydevproject
+
+# checkpoint
+checkpoints/
+
+# For PyCharm users
+.idea/
+
+*/episode_traces.txt
+

@@ -25,19 +25,26 @@ boop with alphazero (coming soon)
 
 From the project root directory, start the game with:
 ```bash
-python3 -m boop.main
+python -m packages.boop_pygame.main
 ```
 
 ## Running Tests
 
 To run unit tests:
 ```bash
-python3 -m unittest boop.tests.test_game
+python -m unittest packages.boop_core.tests.test_game
 ```
 
 ## Running Demo Scripts
 
 To run a demo (e.g., random game):
 ```bash
-python3 -m boop.demo.demo_random_game_state_ui
+python -m packages.boop_pygame.demo.demo_random_game_state_ui
+```
+
+## AlphaZero Training
+
+```bash
+cd packages/boop_agents/alphazero
+python train.py
 ```
