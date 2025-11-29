@@ -136,9 +136,9 @@ class Game:
                 game_state.choose_graduation(((row-1, col-1), (row, col), (row+1, col+1)))
 
         if game_state.state_mode == STATE_WAITING_FOR_GRADUATION_CHOICE:
-            return (self.__game_state_to_tensor(game_state), player)
+            return (self.game_state_to_tensor(game_state), player)
         else:
-            return (self.__game_state_to_tensor(game_state), -player)
+            return (self.game_state_to_tensor(game_state), -player)
 
     def action_to_move(self, action):
         """
@@ -226,7 +226,7 @@ class Game:
 
         return st
     
-    def __game_state_to_tensor(self, gamestate: GameState):
+    def game_state_to_tensor(self, gamestate: GameState):
         board = np.zeros((9, 6, 6), dtype=int)
         for r in range(6):
             for c in range(6):
