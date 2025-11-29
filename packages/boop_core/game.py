@@ -452,7 +452,7 @@ class GameState:
                         if len(positions) == 3:
                             self.game_over = True
                             self.winner = "orange" if current_piece == "oc" else "gray"
-                            logging.info("Game over! Winner: %s", self.winner)
+                            logging.debug("Game over! Winner: %s", self.winner)
                             return
 
         # Check for the second win condition: having all 8 Cats on the bed

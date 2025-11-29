@@ -4,8 +4,6 @@ import copy
 import os
 from packages.boop_core.game import STATE_WAITING_FOR_GRADUATION_CHOICE
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
 
 # Colors
 LIGHT_BLUE = (173, 216, 230)
@@ -63,7 +61,7 @@ class Button:
 
 
 class GameUI:
-    def __init__(self, game_state):
+    def __init__(self, game_state, orange_agent=None, gray_agent=None):
         pygame.init()
         self.game_state = game_state
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -73,6 +71,10 @@ class GameUI:
         self.selected_piece_type = {"orange": "ok", "gray": "gk"}  # Default selections
         self.create_buttons()
         self.history = []
+
+        # Agent system - functions that take game_state and return best move
+        self.orange_agent = orange_agent
+        self.gray_agent = gray_agent
 
         # Add attributes to store the loaded images
         self.orange_kitten_img = None
@@ -135,6 +137,12 @@ class GameUI:
         )
 
     def handle_event(self, event):
+        # first touch on an ai first game will trigger it to start
+        current_agent = self.orange_agent if self.game_state.current_turn == "orange" else self.gray_agent
+        if current_agent:
+            self.check_agent_move()
+            return
+
         if event.type == pygame.MOUSEBUTTONDOWN and self.game_state.game_over:
             logging.debug("Game is over. Click is a no-op.")
             return
@@ -192,6 +200,36 @@ class GameUI:
         self.game_state.choose_graduation(choices)
         self.history.append(old_state)
 
+        # Check if an agent should make a move after graduation
+        self.check_agent_move()
+
+    def check_agent_move(self):
+        """Check if an agent should make a move and execute it."""
+        current_agent = self.orange_agent if self.game_state.current_turn == "orange" else self.gray_agent
+
+        if current_agent and not self.game_state.game_over:
+            pygame.time.wait(500)  # Small delay for better UX
+
+            best_move = current_agent(self.game_state)
+            if best_move:
+                move_type, move_data = best_move
+                old_state = copy.deepcopy(self.game_state)
+
+                if move_type == "place":
+                    piece_type, position = move_data
+                    self.game_state.place_piece(piece_type, position)
+                    logging.info(f"{old_state.current_turn} AI placed {piece_type} at {position}")
+                elif move_type == "graduate":
+                    self.game_state.choose_graduation(move_data)
+                    logging.info(f"{old_state.current_turn} AI chose graduation: {move_data}")
+
+                self.history.append(old_state)
+                print(self.game_state)
+                self.render()
+
+                # Agent might need to make another move if it's still their turn
+                self.check_agent_move()
+
     def process_move(self, board_pos):
         current_piece_type = self.selected_piece_type[self.game_state.current_turn]
         """
@@ -209,6 +247,9 @@ class GameUI:
         self.history.append(old_state)
 
         self.render()  # Update the UI after placing the piece
+
+        # Check if an agent should make a move
+        self.check_agent_move()
 
     def undo_move(self):
         if self.history:
@@ -319,6 +360,13 @@ class GameUI:
             BLACK,
         )
         self.screen.blit(selected_piece_text, (BOARD_WIDTH + MARGIN, y_offset))
+        y_offset += FONT_SIZE + TEXT_PADDING
+
+        # Display AI status
+        orange_agent_status = "AI" if self.orange_agent else "Human"
+        gray_agent_status = "AI" if self.gray_agent else "Human"
+        ai_text = self.font.render(f"Orange: {orange_agent_status} | Gray: {gray_agent_status}", True, BLACK)
+        self.screen.blit(ai_text, (BOARD_WIDTH + MARGIN, y_offset))
         y_offset += FONT_SIZE + TEXT_PADDING
 
         # Draw piece selection buttons
