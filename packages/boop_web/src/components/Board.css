@@ -38,6 +38,11 @@
   transition: all 0.2s ease;
   border: 2px solid transparent;
   position: relative;
+  outline: none;
+}
+
+.board-cell:focus {
+  outline: none;
 }
 
 .board-cell:hover {

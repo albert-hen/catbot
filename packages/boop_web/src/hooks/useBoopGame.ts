@@ -159,7 +159,7 @@ export function useBoopGame(
   // Keyboard handler for undo (only when both players are human)
   useEffect(() => {
     const bothHuman = options.playerConfig.orange === 'human' && options.playerConfig.gray === 'human';
-    if (!bothHuman || gameState.gameOver || gameHistory.length === 0) return;
+    if (!bothHuman || gameHistory.length === 0) return;
     
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'u' && !isAIThinking) {
@@ -170,6 +170,7 @@ export function useBoopGame(
         setGameHistory(gameHistory.slice(0, -1));
         setSelectedPieceType(null);
         setHoveredGraduation(null);
+        
       }
     };
     
