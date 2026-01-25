@@ -1,5 +1,6 @@
 import logging
 import coloredlogs
+import torch
 
 from packages.boop_agents.alphazero.Coach import Coach
 from packages.boop_agents.alphazero.BoopGame import Game
@@ -16,8 +17,8 @@ args = dotdict({
     'tempThreshold': 15,        #
     'updateThreshold': 0.6,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
     'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
-    'numMCTSSims': 256,          # Number of games moves for MCTS to simulate.
-    'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
+    'numMCTSSims': 32,          # Number of games moves for MCTS to simulate.
+    'arenaCompare': 20,         # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
 
     'checkpoint': './temp/',
@@ -29,6 +30,9 @@ args = dotdict({
 
 
 def main():
+    from packages.boop_agents.alphazero.NNet import args as nnet_args
+    log.info('🚀 Using device: %s', nnet_args.device)
+    
     log.info('Loading %s...', Game.__name__)
     g = Game()
 
