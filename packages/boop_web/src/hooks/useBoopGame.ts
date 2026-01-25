@@ -53,6 +53,7 @@ export function useBoopGame(
   const [selectedPieceType, setSelectedPieceType] = useState<PieceType | null>(null);
   const [hoveredGraduation, setHoveredGraduation] = useState<GraduationChoice | null>(null);
   const [isAIThinking, setIsAIThinking] = useState(false);
+  const [gameHistory, setGameHistory] = useState<GameState[]>([]);
   
   const mctsRef = useRef<MCTS | null>(null);
   const processingRef = useRef(false);
@@ -155,6 +156,32 @@ export function useBoopGame(
     checkAndMakeAIMove();
   }, [gameState.currentTurn, gameState.stateMode, checkAndMakeAIMove]);
   
+  // Keyboard handler for undo (only when both players are human)
+  useEffect(() => {
+    const bothHuman = options.playerConfig.orange === 'human' && options.playerConfig.gray === 'human';
+    if (!bothHuman || gameState.gameOver || gameHistory.length === 0) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'u' && !isAIThinking) {
+        e.preventDefault();
+        // Pop from history and restore that state
+        const previousState = gameHistory[gameHistory.length - 1];
+        setGameState(previousState);
+        setGameHistory(gameHistory.slice(0, -1));
+        setSelectedPieceType(null);
+        setHoveredGraduation(null);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameHistory, isAIThinking, options.playerConfig, gameState.gameOver]);
+  
+  // Save state to history before each move
+  const pushToHistory = useCallback(() => {
+    setGameHistory(prev => [...prev, gameState.clone()]);
+  }, [gameState]);;
+  
   // Set default piece type when turn changes
   useEffect(() => {
     if (gameState.stateMode === 'waiting_for_placement') {
@@ -184,13 +211,14 @@ export function useBoopGame(
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
     
     try {
+      pushToHistory();
       const newState = gameState.clone();
       newState.placePiece(selectedPieceType, position);
       setGameState(newState);
     } catch (error) {
       console.error('Invalid move:', error);
     }
-  }, [gameState, selectedPieceType, isAIThinking, options.playerConfig]);
+  }, [gameState, selectedPieceType, isAIThinking, options.playerConfig, pushToHistory]);
   
   const selectGraduation = useCallback((choice: GraduationChoice) => {
     if (gameState.stateMode !== 'waiting_for_graduation_choice') return;
@@ -200,6 +228,7 @@ export function useBoopGame(
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
     
     try {
+      pushToHistory();
       const newState = gameState.clone();
       newState.chooseGraduation(choice);
       setGameState(newState);
@@ -207,10 +236,11 @@ export function useBoopGame(
     } catch (error) {
       console.error('Invalid graduation choice:', error);
     }
-  }, [gameState, isAIThinking, options.playerConfig]);
+  }, [gameState, isAIThinking, options.playerConfig, pushToHistory]);
   
   const resetGame = useCallback(() => {
     setGameState(new GameState());
+    setGameHistory([]);
     setSelectedPieceType(null);
     setHoveredGraduation(null);
     setIsAIThinking(false);
