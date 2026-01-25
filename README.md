@@ -43,10 +43,8 @@ python -m packages.boop_pygame.demo.demo_random_game_state_ui
 ```
 
 ## AlphaZero Training
-
 ```bash
-cd packages/boop_agents/alphazero
-python train.py
+python -m packages.boop_agents.alphazero.main
 ```
 
 
