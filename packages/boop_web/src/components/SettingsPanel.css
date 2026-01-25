@@ -1,0 +1,176 @@
+/**
+ * Settings Panel styles
+ */
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.settings-panel h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 12px;
+}
+
+.model-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-indicator.loaded {
+  background: #4CAF50;
+}
+
+.status-indicator.loading {
+  background: #FFC107;
+  animation: pulse 1s infinite;
+}
+
+.status-indicator.not-loaded {
+  background: #f44336;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.player-config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-name {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Turn indicator icons */
+.turn-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.turn-icon.orange {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+  box-shadow: 0 2px 4px rgba(255, 152, 0, 0.4);
+}
+
+.turn-icon.gray {
+  background: linear-gradient(135deg, #9E9E9E 0%, #757575 100%);
+  box-shadow: 0 2px 4px rgba(158, 158, 158, 0.4);
+}
+
+.toggle-button {
+  padding: 8px 16px;
+  border: 2px solid #ddd;
+  border-radius: 20px;
+  background: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.toggle-button:hover:not(:disabled) {
+  border-color: #999;
+}
+
+.toggle-button.ai {
+  background: #E3F2FD;
+  border-color: #2196F3;
+  color: #1565C0;
+}
+
+.toggle-button.human {
+  background: #FFF3E0;
+  border-color: #FF9800;
+  color: #E65100;
+}
+
+.toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.ai-config label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-config input {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.config-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+}
+
+.reset-button {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #4CAF50;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-button:hover {
+  background: #45a049;
+}
+
+.reset-button:active {
+  transform: scale(0.98);
+}

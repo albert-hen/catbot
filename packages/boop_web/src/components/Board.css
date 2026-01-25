@@ -1,0 +1,146 @@
+/**
+ * Board styles
+ */
+
+.board-container {
+  width: 680px;
+  height: 648px;
+  background-image: url('/boopboard3.jpg');
+  background-size: 100% 100%;
+  background-position: top left;
+  background-repeat: no-repeat;
+  padding: 23px 32px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-row {
+  display: flex;
+  gap: 2px;
+}
+
+.board-cell {
+  width: 102px;
+  height: 98px;
+  flex-shrink: 0;
+  background: transparent;
+  border-radius: 0px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  position: relative;
+}
+
+.board-cell:hover {
+  transform: scale(1.05);
+  z-index: 1;
+}
+
+.board-cell.empty:hover {
+  background: rgba(245, 222, 179, 0.5);
+}
+
+.board-cell.placeable {
+  background: rgba(135, 206, 235, 0.4);
+  border-color: #87CEEB;
+}
+
+.board-cell.placeable:hover {
+  background: rgba(135, 206, 235, 0.6);
+}
+
+.board-cell.highlighted {
+  border-color: #FFD700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+}
+
+.board-cell.graduation-highlight {
+  border-color: #FF69B4;
+  background: rgba(255, 105, 180, 0.4);
+  box-shadow: 0 0 16px rgba(255, 105, 180, 0.6);
+}
+
+/* Piece images using sprite sheets */
+.piece-img {
+  width: 60px;
+  height: 60px;
+  background-size: 150px 75px;
+  background-repeat: no-repeat;
+  filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.3));
+}
+
+/* Kitten sprites from kittens.png (75x75 each, gray at 0,0, orange at 75,0) */
+.piece-img.gray-kitten {
+  background-image: url('/kittens.png');
+  background-position: 0 0;
+  background-size: 120px 60px;
+}
+
+.piece-img.orange-kitten {
+  background-image: url('/kittens.png');
+  background-position: -60px 0;
+  background-size: 120px 60px;
+}
+
+/* Cat sprites from cats.png (75x75 each, gray at 0,0, orange at 75,0) */
+.piece-img.gray-cat {
+  background-image: url('/cats.png');
+  background-position: 0 0;
+  background-size: 120px 60px;
+}
+
+.piece-img.orange-cat {
+  background-image: url('/cats.png');
+  background-position: -60px 0;
+  background-size: 120px 60px;
+}
+
+/* Piece cell background colors for better visibility */
+.board-cell.has-piece.piece-cell-ok,
+.board-cell.has-piece.piece-cell-oc {
+  background: rgba(255, 228, 181, 0.6);
+}
+
+.board-cell.has-piece.piece-cell-gk,
+.board-cell.has-piece.piece-cell-gc {
+  background: rgba(211, 211, 211, 0.6);
+}
+
+/* Responsive sizing */
+@media (max-width: 600px) {
+  .board-cell {
+    width: 56px;
+    height: 56px;
+  }
+  
+  .piece-img {
+    width: 42px;
+    height: 42px;
+    background-size: 84px 42px;
+  }
+  
+  .piece-img.gray-kitten,
+  .piece-img.orange-kitten,
+  .piece-img.gray-cat,
+  .piece-img.orange-cat {
+    background-size: 84px 42px;
+  }
+  
+  .piece-img.orange-kitten,
+  .piece-img.orange-cat {
+    background-position: -42px 0;
+  }
+  
+  .board-container {
+    padding: 12px;
+  }
+}
