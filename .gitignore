@@ -23,5 +23,5 @@ checkpoints/
 # For PyCharm users
 .idea/
 
-*/episode_traces.txt
+episode_traces.txt
 
