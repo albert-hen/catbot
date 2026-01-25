@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 648" width="680" height="648">
+  <defs>
+    <!-- Board background gradient -->
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7EC8E3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5BA3C6;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Paw print pattern -->
+    <pattern id="pawPattern" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
+      <g fill="#6BB8D6" opacity="0.3">
+        <!-- Main pad -->
+        <ellipse cx="30" cy="35" rx="12" ry="10"/>
+        <!-- Toe beans -->
+        <circle cx="18" cy="20" r="6"/>
+        <circle cx="30" cy="15" r="6"/>
+        <circle cx="42" cy="20" r="6"/>
+        <circle cx="48" cy="32" r="5"/>
+      </g>
+      <g fill="#6BB8D6" opacity="0.2" transform="translate(60, 60) rotate(15)">
+        <!-- Main pad -->
+        <ellipse cx="30" cy="35" rx="10" ry="8"/>
+        <!-- Toe beans -->
+        <circle cx="20" cy="22" r="5"/>
+        <circle cx="30" cy="18" r="5"/>
+        <circle cx="40" cy="22" r="5"/>
+      </g>
+    </pattern>
+    
+    <!-- Fish bone pattern -->
+    <pattern id="fishPattern" x="0" y="0" width="180" height="180" patternUnits="userSpaceOnUse">
+      <g stroke="#6BB8D6" stroke-width="2" fill="none" opacity="0.25">
+        <!-- Fish bone 1 -->
+        <g transform="translate(20, 40) rotate(-10)">
+          <line x1="0" y1="0" x2="50" y2="0"/>
+          <line x1="10" y1="0" x2="5" y2="-8"/>
+          <line x1="10" y1="0" x2="5" y2="8"/>
+          <line x1="20" y1="0" x2="15" y2="-10"/>
+          <line x1="20" y1="0" x2="15" y2="10"/>
+          <line x1="30" y1="0" x2="25" y2="-10"/>
+          <line x1="30" y1="0" x2="25" y2="10"/>
+          <line x1="40" y1="0" x2="35" y2="-8"/>
+          <line x1="40" y1="0" x2="35" y2="8"/>
+          <!-- Tail -->
+          <path d="M50,0 L60,-8 L55,0 L60,8 Z"/>
+        </g>
+        <!-- Fish bone 2 -->
+        <g transform="translate(100, 120) rotate(20)">
+          <line x1="0" y1="0" x2="40" y2="0"/>
+          <line x1="8" y1="0" x2="4" y2="-7"/>
+          <line x1="8" y1="0" x2="4" y2="7"/>
+          <line x1="16" y1="0" x2="12" y2="-8"/>
+          <line x1="16" y1="0" x2="12" y2="8"/>
+          <line x1="24" y1="0" x2="20" y2="-8"/>
+          <line x1="24" y1="0" x2="20" y2="8"/>
+          <line x1="32" y1="0" x2="28" y2="-7"/>
+          <line x1="32" y1="0" x2="28" y2="7"/>
+          <path d="M40,0 L48,-6 L44,0 L48,6 Z"/>
+        </g>
+      </g>
+    </pattern>
+    
+    <!-- Cell gradient -->
+    <linearGradient id="cellGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A8DFF0;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#8BCFE5;stop-opacity:0.3" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main background -->
+  <rect width="680" height="648" fill="url(#boardGrad)"/>
+  
+  <!-- Pattern overlays -->
+  <rect width="680" height="648" fill="url(#pawPattern)"/>
+  <rect width="680" height="648" fill="url(#fishPattern)"/>
+  
+  <!-- Board border/frame -->
+  <rect x="10" y="10" width="660" height="628" rx="15" ry="15" 
+        fill="none" stroke="#4A9AB8" stroke-width="4" opacity="0.5"/>
+  
+  <!-- Grid cells (6x6) - starting at padding 32,23 with 102x98 cells and 2px gaps -->
+  <g>
+    <!-- Row 0 -->
+    <rect x="32" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="23" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    
+    <!-- Row 1 -->
+    <rect x="32" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="123" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    
+    <!-- Row 2 -->
+    <rect x="32" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="223" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    
+    <!-- Row 3 -->
+    <rect x="32" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="323" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    
+    <!-- Row 4 -->
+    <rect x="32" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="423" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    
+    <!-- Row 5 -->
+    <rect x="32" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="136" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="240" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="344" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="448" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+    <rect x="552" y="523" width="102" height="98" fill="url(#cellGrad)" rx="4"/>
+  </g>
+  
+  <!-- Corner decorations -->
+  <g fill="#4A9AB8" opacity="0.3">
+    <circle cx="20" cy="20" r="8"/>
+    <circle cx="660" cy="20" r="8"/>
+    <circle cx="20" cy="628" r="8"/>
+    <circle cx="660" cy="628" r="8"/>
+  </g>
+</svg>
