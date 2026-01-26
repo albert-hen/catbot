@@ -49,6 +49,30 @@ export interface GraduationMove {
 export type GameMove = PlacementMove | GraduationMove;
 
 /**
+ * Effect of a single piece being booped
+ */
+export interface BoopEffect {
+  piece: PieceType;
+  from: Position;
+  to: Position | null; // null = pushed off board
+}
+
+/**
+ * Effects of a move, used for animation and highlighting
+ */
+export interface MoveEffects {
+  placedAt: Position;
+  placedPiece: PieceType;
+  boops: BoopEffect[];
+  graduatedPositions: Position[] | null; // positions where pieces were graduated from
+}
+
+/**
+ * Animation duration in milliseconds (configurable)
+ */
+export const ANIMATION_DURATION_MS = 300;
+
+/**
  * Serializable game state for JSON communication
  */
 export interface SerializableGameState {

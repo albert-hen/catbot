@@ -14,6 +14,8 @@ import type {
   GraduatedCount,
   GraduationChoice,
   SerializableGameState,
+  MoveEffects,
+  BoopEffect,
 } from './types';
 import {
   BOARD_SIZE,
@@ -135,8 +137,10 @@ export class GameState {
   /**
    * Places a piece on the board at the specified position.
    * Handles all game logic until the next required input.
+   * Returns MoveEffects describing what happened (for animation/highlighting).
+   * Note: Effects are not stored in GameState - caller must capture if needed.
    */
-  placePiece(pieceType: PieceType, position: Position): void {
+  placePiece(pieceType: PieceType, position: Position): MoveEffects {
     if (this.gameOver) {
       throw new Error('Game is already over.');
     }
@@ -166,13 +170,21 @@ export class GameState {
     this.board[row][col] = pieceType;
     this.availablePieces[pieceType] -= 1;
 
-    // Boop adjacent pieces
-    this.boopPieces(position);
+    // Boop adjacent pieces and collect effects
+    const boops = this.boopPieces(position);
+    
+    // Build move effects
+    const effects: MoveEffects = {
+      placedAt: position,
+      placedPiece: pieceType,
+      boops,
+      graduatedPositions: null,
+    };
 
     // Check for win condition
     this.checkForWin();
     if (this.gameOver) {
-      return;
+      return effects;
     }
 
     // Calculate graduation choices
@@ -180,6 +192,7 @@ export class GameState {
 
     if (this.graduationChoices.length === 1) {
       // Only one graduation choice, perform it automatically
+      effects.graduatedPositions = [...this.graduationChoices[0]] as Position[];
       this.performGraduation(this.graduationChoices[0]);
       this.graduationChoices = [];
       this.switchTurn();
@@ -191,12 +204,15 @@ export class GameState {
       // No graduation, switch turn
       this.switchTurn();
     }
+    
+    return effects;
   }
 
   /**
    * Choose a graduation option from available choices.
+   * Returns the positions that were graduated (for highlighting).
    */
-  chooseGraduation(choice: GraduationChoice): void {
+  chooseGraduation(choice: GraduationChoice): Position[] {
     if (this.stateMode !== 'waiting_for_graduation_choice') {
       throw new Error('Game is not waiting for graduation choice.');
     }
@@ -207,18 +223,23 @@ export class GameState {
       throw new Error(`Invalid graduation choice. Available choices: ${JSON.stringify(this.graduationChoices)}`);
     }
 
+    const graduatedPositions = [...validChoice] as Position[];
     this.performGraduation(validChoice);
     this.graduationChoices = [];
     this.switchTurn();
+    
+    return graduatedPositions;
   }
 
   /**
    * Boop all pieces adjacent to the given position.
+   * Returns array of boop effects for animation.
    */
-  private boopPieces(position: Position): void {
+  private boopPieces(position: Position): BoopEffect[] {
+    const effects: BoopEffect[] = [];
     const [row, col] = position;
     const currentPiece = this.board[row][col];
-    if (!currentPiece) return;
+    if (!currentPiece) return effects;
 
     const currentIsCat = isCat(currentPiece);
 
@@ -246,14 +267,26 @@ export class GameState {
           // Move the piece
           this.board[newRow][newCol] = adjacentPiece;
           this.board[adjRow][adjCol] = null;
+          effects.push({
+            piece: adjacentPiece,
+            from: [adjRow, adjCol],
+            to: [newRow, newCol],
+          });
         }
-        // If blocked, piece doesn't move
+        // If blocked, piece doesn't move (no effect)
       } else {
         // Boop off the board - piece returns to pool
         this.board[adjRow][adjCol] = null;
         this.availablePieces[adjacentPiece] += 1;
+        effects.push({
+          piece: adjacentPiece,
+          from: [adjRow, adjCol],
+          to: null, // null means pushed off board
+        });
       }
     }
+    
+    return effects;
   }
 
   /**

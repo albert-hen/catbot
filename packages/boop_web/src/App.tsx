@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Board, ControlPanel, SettingsPanel } from './components';
 import { useBoopGame } from './hooks';
-import type { PlayerConfig, AIConfig } from './hooks';
+import type { PlayerConfig, AIConfig, AnimationConfig } from './hooks';
 import { ONNXNeuralNetwork } from './game';
 import type { Position } from './game';
 import './App.css';
@@ -23,6 +23,11 @@ function App() {
   });
   const [aiConfig, setAIConfig] = useState<AIConfig>({
     numSimulations: 256,
+  });
+  const [animationConfig, setAnimationConfig] = useState<AnimationConfig>(() => {
+    // Load from localStorage if available
+    const saved = localStorage.getItem('boop_animation_enabled');
+    return { enabled: saved !== null ? saved === 'true' : true };
   });
   
   // Load the model on mount
@@ -51,14 +56,20 @@ function App() {
     selectedPieceType,
     hoveredGraduation,
     isAIThinking,
+    isAnimating,
+    lastMoveHighlights,
+    moveEffects,
+    canUndo,
     selectPieceType,
     placePiece,
     selectGraduation,
     setHoveredGraduation,
     resetGame,
+    undo,
   } = useBoopGame(nnet, {
     playerConfig,
     aiConfig,
+    animationConfig,
   });
   
   // Handle cell click
@@ -79,6 +90,12 @@ function App() {
   const handleAIConfigChange = useCallback((config: AIConfig) => {
     setAIConfig(config);
   }, []);
+  
+  // Handle animation config change (persist to localStorage)
+  const handleAnimationConfigChange = useCallback((config: AnimationConfig) => {
+    setAnimationConfig(config);
+    localStorage.setItem('boop_animation_enabled', String(config.enabled));
+  }, []);
 
   return (
     <div className="app">
@@ -92,6 +109,10 @@ function App() {
             gameState={gameState}
             onCellClick={handleCellClick}
             graduationHighlight={hoveredGraduation}
+            lastMoveHighlights={lastMoveHighlights}
+            moveEffects={moveEffects}
+            animationEnabled={animationConfig.enabled}
+            isAnimating={isAnimating}
           />
           
           <div className="side-panel">
@@ -107,9 +128,13 @@ function App() {
             <SettingsPanel
               playerConfig={playerConfig}
               aiConfig={aiConfig}
+              animationConfig={animationConfig}
               onPlayerConfigChange={handlePlayerConfigChange}
               onAIConfigChange={handleAIConfigChange}
+              onAnimationConfigChange={handleAnimationConfigChange}
               onReset={resetGame}
+              canUndo={canUndo}
+              onUndo={undo}
               modelLoaded={modelLoaded}
               modelLoading={modelLoading}
             />

@@ -174,3 +174,58 @@
 .reset-button:active {
   transform: scale(0.98);
 }
+
+/* Animation config */
+.animation-config {
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #4CAF50;
+}
+
+/* Game controls */
+.game-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.game-controls .reset-button,
+.game-controls .undo-button {
+  flex: 1;
+}
+
+.undo-button {
+  padding: 12px 24px;
+  border: 2px solid #9E9E9E;
+  border-radius: 8px;
+  background: white;
+  color: #616161;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.undo-button:hover:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #757575;
+}
+
+.undo-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -12,6 +12,40 @@
   padding: 23px 32px;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  position: relative; /* For arrow overlay positioning */
+}
+
+/* SVG overlay for boop arrows */
+.boop-arrows-overlay {
+  position: absolute;
+  top: 23px;  /* Match padding */
+  left: 32px;
+  width: 616px;  /* 6 cells * 102 + 5 gaps * 2 = 622, but we use cell centers */
+  height: 600px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.boop-arrow {
+  stroke: #2196F3;
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 4px rgba(33, 150, 243, 0.8));
+}
+
+.boop-arrow-off-board {
+  stroke: #FF5722;
+  filter: drop-shadow(0 0 4px rgba(255, 87, 34, 0.8));
+}
+
+.boop-off-board-mark {
+  fill: #FF5722;
+  font-size: 20px;
+  font-weight: bold;
+  text-anchor: middle;
+  filter: drop-shadow(0 0 4px rgba(255, 87, 34, 0.8));
 }
 
 .board {
@@ -74,6 +108,27 @@
   box-shadow: 0 0 16px rgba(255, 105, 180, 0.6);
 }
 
+/* Last placement highlight - green glow for "something new appeared here" */
+.board-cell.last-placement {
+  border-color: #4CAF50;
+  box-shadow: 0 0 16px rgba(76, 175, 80, 0.7), inset 0 0 8px rgba(76, 175, 80, 0.3);
+}
+
+/* Graduated cell highlight - purple for "transformation" */
+.board-cell.graduated-cell {
+  border-color: #9C27B0;
+  background: rgba(156, 39, 176, 0.3);
+  box-shadow: 0 0 16px rgba(156, 39, 176, 0.6);
+}
+
+/* Combined: if a cell is both last placement AND graduated (auto-graduation) */
+.board-cell.last-placement.graduated-cell {
+  border-color: #9C27B0;
+  box-shadow: 
+    0 0 16px rgba(76, 175, 80, 0.5),
+    0 0 24px rgba(156, 39, 176, 0.5);
+}
+
 /* Piece images using sprite sheets */
 .piece-img {
   width: 60px;
@@ -81,6 +136,30 @@
   background-size: 150px 75px;
   background-repeat: no-repeat;
   filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.3));
+}
+
+/* Piece animation for boop movement */
+.piece-img.piece-animating {
+  animation: boop-slide 300ms ease-out forwards;
+  /* Blue motion trail effect */
+  filter: 
+    drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.3))
+    drop-shadow(0 0 8px rgba(33, 150, 243, 0.8))
+    drop-shadow(0 0 16px rgba(33, 150, 243, 0.5));
+}
+
+@keyframes boop-slide {
+  0% {
+    transform: translate(var(--boop-start-x, 0), var(--boop-start-y, 0));
+    filter: 
+      drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.3))
+      drop-shadow(0 0 12px rgba(33, 150, 243, 1))
+      drop-shadow(0 0 24px rgba(33, 150, 243, 0.8));
+  }
+  100% {
+    transform: translate(0, 0);
+    filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.3));
+  }
 }
 
 /* Kitten sprites from kittens.png (75x75 each, gray at 0,0, orange at 75,0) */

@@ -2,15 +2,19 @@
  * Boop Game - Settings Panel Component
  */
 
-import type { PlayerConfig, AIConfig } from '../hooks/useBoopGame';
+import type { PlayerConfig, AIConfig, AnimationConfig } from '../hooks/useBoopGame';
 import './SettingsPanel.css';
 
 interface SettingsPanelProps {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
+  animationConfig: AnimationConfig;
   onPlayerConfigChange: (config: PlayerConfig) => void;
   onAIConfigChange: (config: AIConfig) => void;
+  onAnimationConfigChange: (config: AnimationConfig) => void;
   onReset: () => void;
+  canUndo: boolean;
+  onUndo: () => void;
   modelLoaded: boolean;
   modelLoading: boolean;
 }
@@ -18,9 +22,13 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   playerConfig,
   aiConfig,
+  animationConfig,
   onPlayerConfigChange,
   onAIConfigChange,
+  onAnimationConfigChange,
   onReset,
+  canUndo,
+  onUndo,
   modelLoaded,
   modelLoading,
 }) => {
@@ -98,10 +106,32 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
       )}
 
-      {/* Reset Button */}
-      <button className="reset-button" onClick={onReset}>
-        New Game
-      </button>
+      {/* Animation Settings */}
+      <div className="animation-config">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={animationConfig.enabled}
+            onChange={(e) => onAnimationConfigChange({ enabled: e.target.checked })}
+          />
+          <span>Enable move animations</span>
+        </label>
+      </div>
+
+      {/* Game Controls */}
+      <div className="game-controls">
+        <button 
+          className="undo-button" 
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo last move (U)"
+        >
+          ↩ Undo
+        </button>
+        <button className="reset-button" onClick={onReset}>
+          New Game
+        </button>
+      </div>
     </div>
   );
 };

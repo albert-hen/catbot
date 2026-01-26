@@ -7,6 +7,7 @@ import type {
   Position, 
   PieceType, 
   GraduationChoice,
+  MoveEffects,
 } from '../game';
 import { 
   GameState, 
@@ -14,6 +15,7 @@ import {
   ONNXNeuralNetwork,
   actionToMove,
   MoveType,
+  ANIMATION_DURATION_MS,
 } from '../game';
 
 export interface PlayerConfig {
@@ -25,10 +27,23 @@ export interface AIConfig {
   numSimulations: number;
 }
 
+export interface AnimationConfig {
+  enabled: boolean;
+}
+
 export interface UseBoopGameOptions {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
+  animationConfig: AnimationConfig;
   onAIThinking?: (thinking: boolean) => void;
+}
+
+/**
+ * Highlights to show on the board for the last move
+ */
+export interface LastMoveHighlights {
+  placedAt: Position | null;
+  graduatedPositions: Position[];
 }
 
 export interface UseBoopGameResult {
@@ -36,6 +51,10 @@ export interface UseBoopGameResult {
   selectedPieceType: PieceType | null;
   hoveredGraduation: GraduationChoice | null;
   isAIThinking: boolean;
+  isAnimating: boolean;
+  lastMoveHighlights: LastMoveHighlights;
+  moveEffects: MoveEffects | null;
+  canUndo: boolean;
   
   // Actions
   selectPieceType: (pieceType: PieceType) => void;
@@ -43,6 +62,7 @@ export interface UseBoopGameResult {
   selectGraduation: (choice: GraduationChoice) => void;
   setHoveredGraduation: (choice: GraduationChoice | null) => void;
   resetGame: () => void;
+  undo: () => void;
 }
 
 export function useBoopGame(
@@ -53,7 +73,13 @@ export function useBoopGame(
   const [selectedPieceType, setSelectedPieceType] = useState<PieceType | null>(null);
   const [hoveredGraduation, setHoveredGraduation] = useState<GraduationChoice | null>(null);
   const [isAIThinking, setIsAIThinking] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   const [gameHistory, setGameHistory] = useState<GameState[]>([]);
+  const [moveEffects, setMoveEffects] = useState<MoveEffects | null>(null);
+  const [lastMoveHighlights, setLastMoveHighlights] = useState<LastMoveHighlights>({
+    placedAt: null,
+    graduatedPositions: [],
+  });
   
   const mctsRef = useRef<MCTS | null>(null);
   const processingRef = useRef(false);
@@ -83,6 +109,7 @@ export function useBoopGame(
     if (processingRef.current) return;
     if (gameState.gameOver) return;
     if (!mctsRef.current || !nnet) return;
+    if (isAnimating) return; // Wait for animation to complete
     
     const currentPlayer = gameState.currentTurn;
     const isAI = options.playerConfig[currentPlayer] === 'ai';
@@ -102,8 +129,12 @@ export function useBoopGame(
       
       const { position, moveType } = actionToMove(action);
       
-      // Apply the move
+      // Save state to history before AI move
+      setGameHistory(prev => [...prev, gameState.clone()]);
+      
+      // Apply the move and capture effects
       const newState = gameState.clone();
+      let effects: MoveEffects | null = null;
       
       if (moveType === MoveType.PLACE_KITTEN || moveType === MoveType.PLACE_CAT) {
         let piece: PieceType;
@@ -112,7 +143,7 @@ export function useBoopGame(
         } else {
           piece = currentPlayer === 'orange' ? 'oc' : 'gc';
         }
-        newState.placePiece(piece, position);
+        effects = newState.placePiece(piece, position);
       } else {
         // Graduation move
         const [row, col] = position;
@@ -138,7 +169,30 @@ export function useBoopGame(
             throw new Error(`Unknown move type: ${moveType}`);
         }
         
-        newState.chooseGraduation(choice);
+        const graduatedPositions = newState.chooseGraduation(choice);
+        // For graduation moves, we don't have placement info
+        effects = {
+          placedAt: position, // Not really placement, but marks the graduation center
+          placedPiece: currentPlayer === 'orange' ? 'oc' : 'gc',
+          boops: [],
+          graduatedPositions,
+        };
+      }
+      
+      // Update effects and highlights
+      setMoveEffects(effects);
+      setLastMoveHighlights({
+        placedAt: effects?.placedAt ?? null,
+        graduatedPositions: effects?.graduatedPositions ?? [],
+      });
+      
+      // Handle animation if enabled - set state before gameState so animation renders
+      if (options.animationConfig.enabled && effects && effects.boops.length > 0) {
+        setIsAnimating(true);
+        // Clear animation state after duration (but keep moveEffects for arrows)
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, ANIMATION_DURATION_MS);
       }
       
       setGameState(newState);
@@ -149,34 +203,41 @@ export function useBoopGame(
       setIsAIThinking(false);
       options.onAIThinking?.(false);
     }
-  }, [gameState, nnet, options]);
+  }, [gameState, nnet, options, isAnimating]);
   
-  // Trigger AI move when it's AI's turn
+  // Trigger AI move when it's AI's turn (also after animation completes)
   useEffect(() => {
     checkAndMakeAIMove();
-  }, [gameState.currentTurn, gameState.stateMode, checkAndMakeAIMove]);
+  }, [gameState.currentTurn, gameState.stateMode, isAnimating, checkAndMakeAIMove]);
   
-  // Keyboard handler for undo (only when both players are human)
+  // Undo function - works for both human and AI players
+  const undo = useCallback(() => {
+    if (gameHistory.length === 0 || isAIThinking || isAnimating) return;
+    
+    // Pop from history and restore that state
+    const previousState = gameHistory[gameHistory.length - 1];
+    setGameState(previousState);
+    setGameHistory(gameHistory.slice(0, -1));
+    setSelectedPieceType(null);
+    setHoveredGraduation(null);
+    setMoveEffects(null);
+    setLastMoveHighlights({ placedAt: null, graduatedPositions: [] });
+  }, [gameHistory, isAIThinking, isAnimating]);
+  
+  // Keyboard handler for undo (works for all player configurations)
   useEffect(() => {
-    const bothHuman = options.playerConfig.orange === 'human' && options.playerConfig.gray === 'human';
-    if (!bothHuman || gameHistory.length === 0) return;
+    if (gameHistory.length === 0) return;
     
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'u' && !isAIThinking) {
+      if (e.key.toLowerCase() === 'u' && !isAIThinking && !isAnimating) {
         e.preventDefault();
-        // Pop from history and restore that state
-        const previousState = gameHistory[gameHistory.length - 1];
-        setGameState(previousState);
-        setGameHistory(gameHistory.slice(0, -1));
-        setSelectedPieceType(null);
-        setHoveredGraduation(null);
-        
+        undo();
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameHistory, isAIThinking, options.playerConfig, gameState.gameOver]);
+  }, [gameHistory, isAIThinking, isAnimating, undo]);
   
   // Save state to history before each move
   const pushToHistory = useCallback(() => {
@@ -206,7 +267,7 @@ export function useBoopGame(
   const placePiece = useCallback((position: Position) => {
     if (gameState.stateMode !== 'waiting_for_placement') return;
     if (!selectedPieceType) return;
-    if (isAIThinking) return;
+    if (isAIThinking || isAnimating) return;
     
     // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
@@ -214,16 +275,33 @@ export function useBoopGame(
     try {
       pushToHistory();
       const newState = gameState.clone();
-      newState.placePiece(selectedPieceType, position);
+      const effects = newState.placePiece(selectedPieceType, position);
+      
+      // Update effects and highlights
+      setMoveEffects(effects);
+      setLastMoveHighlights({
+        placedAt: effects.placedAt,
+        graduatedPositions: effects.graduatedPositions ?? [],
+      });
+      
+      // Handle animation if enabled - set state before gameState so animation renders
+      if (options.animationConfig.enabled && effects.boops.length > 0) {
+        setIsAnimating(true);
+        // Clear animation state after duration (but keep moveEffects for arrows)
+        setTimeout(() => {
+          setIsAnimating(false);
+        }, ANIMATION_DURATION_MS);
+      }
+      
       setGameState(newState);
     } catch (error) {
       console.error('Invalid move:', error);
     }
-  }, [gameState, selectedPieceType, isAIThinking, options.playerConfig, pushToHistory]);
+  }, [gameState, selectedPieceType, isAIThinking, isAnimating, options, pushToHistory]);
   
   const selectGraduation = useCallback((choice: GraduationChoice) => {
     if (gameState.stateMode !== 'waiting_for_graduation_choice') return;
-    if (isAIThinking) return;
+    if (isAIThinking || isAnimating) return;
     
     // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
@@ -231,35 +309,54 @@ export function useBoopGame(
     try {
       pushToHistory();
       const newState = gameState.clone();
-      newState.chooseGraduation(choice);
+      const graduatedPositions = newState.chooseGraduation(choice);
+      
+      // Update highlights to show graduation
+      setLastMoveHighlights(prev => ({
+        ...prev,
+        graduatedPositions,
+      }));
+      setMoveEffects(null); // Clear move effects since this is just graduation
+      
       setGameState(newState);
       setHoveredGraduation(null);
     } catch (error) {
       console.error('Invalid graduation choice:', error);
     }
-  }, [gameState, isAIThinking, options.playerConfig, pushToHistory]);
+  }, [gameState, isAIThinking, isAnimating, options, pushToHistory]);
   
   const resetGame = useCallback(() => {
     setGameState(new GameState());
     setGameHistory([]);
     setSelectedPieceType(null);
     setHoveredGraduation(null);
+    setMoveEffects(null);
+    setLastMoveHighlights({ placedAt: null, graduatedPositions: [] });
     setIsAIThinking(false);
+    setIsAnimating(false);
     processingRef.current = false;
     if (mctsRef.current) {
       mctsRef.current.reset();
     }
   }, []);
   
+  // Derived state
+  const canUndo = gameHistory.length > 0 && !isAIThinking && !isAnimating;
+  
   return {
     gameState,
     selectedPieceType,
     hoveredGraduation,
     isAIThinking,
+    isAnimating,
+    lastMoveHighlights,
+    moveEffects,
+    canUndo,
     selectPieceType,
     placePiece,
     selectGraduation,
     setHoveredGraduation,
     resetGame,
+    undo,
   };
 }
