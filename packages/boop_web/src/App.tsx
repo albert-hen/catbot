@@ -83,8 +83,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Boop</h1>
-        <p className="subtitle">A game of cats and kittens</p>
+        <h1>boop.</h1>
       </header>
       
       <main className="app-main">
@@ -120,9 +119,8 @@ function App() {
       
       <footer className="app-footer">
         <p>
-          Play Boop online! Line up three cats to win.
           <a href="https://boardgamegeek.com/boardgame/355433/boop" target="_blank" rel="noopener noreferrer">
-            Learn more about the game
+            Learn more about boop.
           </a>
         </p>
       </footer>
