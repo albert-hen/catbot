@@ -2,16 +2,19 @@
  * Boop Game - Settings Panel Component
  */
 
-import type { PlayerConfig, AIConfig, AnimationConfig } from '../hooks/useBoopGame';
+import { useState } from 'react';
+import type { PlayerConfig, AIConfig, AnimationConfig, GamePhase } from '../hooks/useBoopGame';
 import './SettingsPanel.css';
 
 interface SettingsPanelProps {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
   animationConfig: AnimationConfig;
+  gamePhase: GamePhase;
   onPlayerConfigChange: (config: PlayerConfig) => void;
   onAIConfigChange: (config: AIConfig) => void;
   onAnimationConfigChange: (config: AnimationConfig) => void;
+  onStartGame: () => void;
   onReset: () => void;
   canUndo: boolean;
   onUndo: () => void;
@@ -32,9 +35,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   playerConfig,
   aiConfig,
   animationConfig,
+  gamePhase,
   onPlayerConfigChange,
   onAIConfigChange,
   onAnimationConfigChange,
+  onStartGame,
   onReset,
   canUndo,
   onUndo,
@@ -49,7 +54,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   modelLoaded,
   modelLoading,
 }) => {
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
+  
   const handlePlayerToggle = (player: 'orange' | 'gray') => {
+    // Only allow toggling in setup phase
+    if (gamePhase !== 'setup') return;
     onPlayerConfigChange({
       ...playerConfig,
       [player]: playerConfig[player] === 'human' ? 'ai' : 'human',
@@ -57,6 +66,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   };
 
   const handleSimulationsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow changes in setup phase
+    if (gamePhase !== 'setup') return;
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value) && value > 0) {
       onAIConfigChange({ ...aiConfig, numSimulations: value });
@@ -70,8 +81,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
   
+  const handleNewGameClick = () => {
+    if (gamePhase === 'playing') {
+      setShowConfirmReset(true);
+    } else {
+      onReset();
+    }
+  };
+  
+  const handleConfirmReset = () => {
+    setShowConfirmReset(false);
+    onReset();
+  };
+  
+  const handleCancelReset = () => {
+    setShowConfirmReset(false);
+  };
+  
   // Check if any AI is playing
   const hasAI = playerConfig.orange === 'ai' || playerConfig.gray === 'ai';
+  const isSetup = gamePhase === 'setup';
+  const isPlaying = gamePhase === 'playing';
+  const isGameOver = gamePhase === 'game_over';
 
   return (
     <div className="settings-panel">
@@ -90,13 +121,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </div>
 
       {/* Player Configuration */}
-      <div className="player-config">
+      <div className={`player-config ${!isSetup ? 'disabled' : ''}`}>
         <div className="player-toggle">
           <span className="player-name"><span className="turn-icon orange"></span> Orange</span>
           <button 
             className={`toggle-button ${playerConfig.orange}`}
             onClick={() => handlePlayerToggle('orange')}
-            disabled={!modelLoaded && playerConfig.orange === 'human'}
+            disabled={!isSetup || (!modelLoaded && playerConfig.orange === 'human')}
           >
             {playerConfig.orange === 'human' ? 'Human' : 'AI'}
           </button>
@@ -106,16 +137,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <button 
             className={`toggle-button ${playerConfig.gray}`}
             onClick={() => handlePlayerToggle('gray')}
-            disabled={!modelLoaded && playerConfig.gray === 'human'}
+            disabled={!isSetup || (!modelLoaded && playerConfig.gray === 'human')}
           >
             {playerConfig.gray === 'human' ? 'Human' : 'AI'}
           </button>
         </div>
+        {!isSetup && (
+          <p className="config-locked-hint">Settings locked during game</p>
+        )}
       </div>
 
       {/* AI Configuration */}
       {hasAI && (
-        <div className="ai-config">
+        <div className={`ai-config ${!isSetup ? 'read-only' : ''}`}>
           <label>
             <span>MCTS Simulations</span>
             <input
@@ -125,6 +159,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               step="10"
               value={aiConfig.numSimulations}
               onChange={handleSimulationsChange}
+              disabled={!isSetup}
             />
           </label>
           <p className="config-hint">
@@ -147,18 +182,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
       )}
       
-      {/* Pause/Replay Controls (only show when AI is playing) */}
-      {hasAI && (
+      {/* Pause/Replay Controls (only show when AI is playing during playing/game_over phase) */}
+      {hasAI && (isPlaying || isGameOver) && (
         <div className="pause-controls">
-          <button
-            className={`pause-button ${isPaused ? 'paused' : ''}`}
-            onClick={onTogglePause}
-            title="Pause/Resume (P)"
-          >
-            {isPaused ? '▶ Resume' : '⏸ Pause'}
-          </button>
+          {isPlaying && (
+            <button
+              className={`pause-button ${isPaused ? 'paused' : ''}`}
+              onClick={onTogglePause}
+              title="Pause/Resume (P)"
+            >
+              {isPaused ? '▶ Resume' : '⏸ Pause'}
+            </button>
+          )}
           
-          {isPaused && (
+          {(isPaused || isGameOver) && (
             <div className="history-navigation">
               <div className="history-position">
                 Move {historyIndex} / {historyLength}
@@ -208,7 +245,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
       {/* Game Controls */}
       <div className="game-controls">
-        {!hasAI && (
+        {/* Undo button only for human vs human during play */}
+        {!hasAI && isPlaying && (
           <button 
             className="undo-button" 
             onClick={onUndo}
@@ -218,10 +256,43 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             ↩ Undo
           </button>
         )}
-        <button className="reset-button" onClick={onReset}>
-          New Game
-        </button>
+        
+        {/* Start Game button in setup phase */}
+        {isSetup && (
+          <button 
+            className="start-button" 
+            onClick={onStartGame}
+            disabled={!modelLoaded && hasAI}
+          >
+            ▶ Start Game
+          </button>
+        )}
+        
+        {/* New Game button during play or game over */}
+        {(isPlaying || isGameOver) && (
+          <button className="reset-button" onClick={handleNewGameClick}>
+            New Game
+          </button>
+        )}
       </div>
+      
+      {/* Confirmation Dialog */}
+      {showConfirmReset && (
+        <div className="confirm-dialog-overlay">
+          <div className="confirm-dialog">
+            <p>Are you sure you want to start a new game?</p>
+            <p className="confirm-subtext">Current game progress will be lost.</p>
+            <div className="confirm-buttons">
+              <button className="confirm-cancel" onClick={handleCancelReset}>
+                Cancel
+              </button>
+              <button className="confirm-ok" onClick={handleConfirmReset}>
+                New Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

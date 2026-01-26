@@ -65,6 +65,7 @@ function App() {
     lastMoveHighlights,
     moveEffects,
     canUndo,
+    gamePhase,
     isPaused,
     isViewingHistory,
     historyIndex,
@@ -74,6 +75,7 @@ function App() {
     placePiece,
     selectGraduation,
     setHoveredGraduation,
+    startGame,
     resetGame,
     undo,
     togglePause,
@@ -92,12 +94,10 @@ function App() {
     }
   }, [gameState.stateMode, placePiece]);
   
-  // Handle player config change (reset game when changing)
+  // Handle player config change (only in setup phase, so no reset needed)
   const handlePlayerConfigChange = useCallback((config: PlayerConfig) => {
     setPlayerConfig(config);
-    // Reset game when player configuration changes
-    resetGame();
-  }, [resetGame]);
+  }, []);
   
   // Handle AI config change (persist delay to localStorage)
   const handleAIConfigChange = useCallback((config: AIConfig) => {
@@ -127,6 +127,7 @@ function App() {
             moveEffects={moveEffects}
             animationEnabled={animationConfig.enabled}
             isAnimating={isAnimating}
+            gamePhase={gamePhase}
           />
           
           <div className="side-panel">
@@ -143,9 +144,11 @@ function App() {
               playerConfig={playerConfig}
               aiConfig={aiConfig}
               animationConfig={animationConfig}
+              gamePhase={gamePhase}
               onPlayerConfigChange={handlePlayerConfigChange}
               onAIConfigChange={handleAIConfigChange}
               onAnimationConfigChange={handleAnimationConfigChange}
+              onStartGame={startGame}
               onReset={resetGame}
               canUndo={canUndo}
               onUndo={undo}

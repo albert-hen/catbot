@@ -315,3 +315,121 @@
 .history-buttons button.go-to-present:hover {
   background: #FFE0B2;
 }
+/* Start Game button */
+.start-button {
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #2196F3;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.start-button:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+.start-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Disabled/locked config states */
+.player-config.disabled {
+  opacity: 0.7;
+}
+
+.player-config.disabled .toggle-button {
+  cursor: not-allowed;
+}
+
+.config-locked-hint {
+  margin: 8px 0 0 0;
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+  text-align: center;
+}
+
+.ai-config.read-only {
+  opacity: 0.8;
+}
+
+.ai-config.read-only input:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+/* Confirmation dialog */
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 320px;
+  text-align: center;
+}
+
+.confirm-dialog p {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.confirm-dialog .confirm-subtext {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.confirm-buttons button {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.confirm-cancel {
+  border: 1px solid #ddd;
+  background: white;
+  color: #666;
+}
+
+.confirm-cancel:hover {
+  background: #f5f5f5;
+}
+
+.confirm-ok {
+  border: none;
+  background: #f44336;
+  color: white;
+}
+
+.confirm-ok:hover {
+  background: #d32f2f;
+}

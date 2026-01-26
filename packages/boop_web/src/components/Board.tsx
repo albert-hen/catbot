@@ -15,6 +15,7 @@ import {
   ANIMATION_DURATION_MS,
 } from '../game';
 import type { LastMoveHighlights } from '../hooks';
+import type { GamePhase } from '../hooks/useBoopGame';
 import './Board.css';
 
 interface BoardProps {
@@ -26,6 +27,7 @@ interface BoardProps {
   moveEffects?: MoveEffects | null;
   animationEnabled?: boolean;
   isAnimating?: boolean;
+  gamePhase?: GamePhase;
 }
 
 const PIECE_INFO: Record<string, { className: string; label: string }> = {
@@ -44,6 +46,7 @@ export const Board: React.FC<BoardProps> = ({
   moveEffects,
   animationEnabled = true,
   isAnimating = false,
+  gamePhase = 'playing',
 }) => {
   const isHighlighted = (row: number, col: number): boolean => {
     return highlightedCells.some(([r, c]) => r === row && c === col);
@@ -235,7 +238,7 @@ export const Board: React.FC<BoardProps> = ({
   };
 
   return (
-    <div className="board-container">
+    <div className={`board-container ${gamePhase === 'setup' ? 'setup-phase' : ''}`}>
       <div className="board" role="grid" aria-label="Boop game board">
         {Array.from({ length: BOARD_SIZE }, (_, row) => (
           <div key={row} className="board-row" role="row">
@@ -244,6 +247,11 @@ export const Board: React.FC<BoardProps> = ({
         ))}
       </div>
       {renderBoopArrows()}
+      {gamePhase === 'setup' && (
+        <div className="setup-overlay">
+          <span className="setup-overlay-text">Click Start Game</span>
+        </div>
+      )}
     </div>
   );
 };

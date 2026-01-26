@@ -15,6 +15,38 @@
   position: relative; /* For arrow overlay positioning */
 }
 
+/* Setup phase - lightened board */
+.board-container.setup-phase {
+  filter: brightness(0.85) saturate(0.7);
+}
+
+.board-container.setup-phase .board {
+  pointer-events: none;
+}
+
+/* Setup overlay */
+.setup-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.setup-overlay-text {
+  color: #333;
+  font-size: 2rem;
+  font-weight: 600;
+  padding: 20px 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
 /* SVG overlay for boop arrows */
 .boop-arrows-overlay {
   position: absolute;
