@@ -25,8 +25,6 @@ class MCTS():
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
-        #self.search_history = []
-
     def getActionProb(self, canonicalBoard, temp=1):
         """
         This function performs numMCTSSims simulations of MCTS starting from
@@ -37,10 +35,6 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
-            #print(f"MCTS Simulation {i+1}/{self.args.numMCTSSims}")
-            #cboard = self.game.tensor_to_game_state(canonicalBoard)
-            #print("Current canonical board state in MCTS search:")
-            #print(cboard)
             self.search(canonicalBoard)
 
         s = self.game.stringRepresentation(canonicalBoard)
@@ -138,45 +132,16 @@ class MCTS():
                     best_act = a
 
         a = best_act
-        # print(f'best action: {a}')
         next_s, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = self.game.getCanonicalForm(next_s, next_player)
 
-        """
-        move = self.game.action_to_move(a)
-        player = None
-        if self.search_history == []:
-            player = 1
-        elif move[1] in (MoveType.PLACE_CAT, MoveType.PLACE_KITTEN):
-            player = -1 * self.search_history[-1]["player"]
-        else:
-            player = self.search_history[-1]["player"]
-        self.search_history.append({
-            "board": next_s,
-            "action": move,
-            "player": player
-        })
-        """
-
-
         # Only flip sign if player changes
-        #try:
         if next_player == 1:
             v = self.search(next_s, visited)
         else:
             v = -self.search(next_s, visited)
 
         visited.remove(s)
-        """
-        except RecursionError:
-            print("RecursionError! Search history:")
-            for step in self.search_history[-100:]:
-                print(f"Player: {step['player']}, Action: {step['action']}")
-                print(self.game.tensor_to_game_state(step['board'], step['player']))
-            raise
-        finally:
-            self.search_history.pop()
-        """
 
 
         if (s, a) in self.Qsa:

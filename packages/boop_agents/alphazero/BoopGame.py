@@ -101,12 +101,9 @@ class Game:
         # Apply the move to the board
         # If the resulting state is a graduation choice, return tensor state with same player
         # If the resulting state is a placement choice, return tensor state with -player
-        #print(f"getting next state for player {player} with action {action}")
         game_state = self.tensor_to_game_state(board, player)
 
-        #print(f"using action {action} to get move")
         move_location, move_type = self.action_to_move(action)
-        #print(f"move location: {move_location}, move type: {move_type}")
         if move_type in [MoveType.PLACE_KITTEN, MoveType.PLACE_CAT]:
             # Determine piece type based on player
             if move_type == MoveType.PLACE_KITTEN:
@@ -114,16 +111,11 @@ class Game:
             else:  # MoveType.PLACE_CAT
                 piece = "oc" if player == 1 else "gc"
 
-            #pcolor = game_state.player_turn
-            ##print(f"{pcolor} placing {piece} at {move_location}")
             game_state.place_piece(piece, move_location)
-            ##print("after", game_state)
         else:
             # graduation choice
             row, col = move_location
             row, col = int(row), int(col)
-            #print(f"{game_state.current_turn} graduating at center ({row}, {col}) with move type {move_type}")
-            #print(game_state)
             if move_type == MoveType.SINGLE_GRADUATION:
                 game_state.choose_graduation(((row, col),))
             elif move_type == MoveType.HORIZONTAL_TRIPLE_GRADUATION:
@@ -260,12 +252,6 @@ class Game:
                         0 for invalid moves
         """
         game_state = self.tensor_to_game_state(board, player)
-        #print(f"getting valid moves for player {player} in state mode {game_state.state_mode}")
-        #print(game_state)
-        #print(game_state.graduation_choices)
-        #print(game_state.placeable_squares)
-        #print(game_state.placeable_pieces)
-        #print(".")
         valid_moves = [0] * self.getActionSize()
 
         # If waiting for graduation choice, only graduation moves are valid
@@ -278,7 +264,6 @@ class Game:
                     row, col = grad_choice[0]
                     action = 72 + row * 6 + col  # After placement actions (72 = 6*6*2)
                     valid_moves[action] = 1
-                    #print(f"{action} is valid for single graduation at ({row}, {col})")
                 elif len(grad_choice) == 3:
                     # Triple graduation
                     row, col = grad_choice[1]  # Center piece
@@ -287,23 +272,19 @@ class Game:
                         if col > 0 and col < 5:
                             action = 108 + row * 4 + (col-1)  # After single graduations
                             valid_moves[action] = 1
-                            #print(f"{action} is valid for horizontal graduation centered at ({row}, {col})")
                     elif grad_choice[0][1] == grad_choice[1][1]:  # Same column = vertical
                         if row > 0 and row < 5:
                             action = 132 + (row-1)*6+col  # After horizontal graduations
                             valid_moves[action] = 1
-                            #print(f"{action} is valid for vertical graduation centered at ({row}, {col})")
                     else:  # Diagonal
                         if row > 0 and row < 5 and col > 0 and col < 5:
                             sorted_triple = sorted(list(grad_choice))
                             if sorted_triple[0][1] > sorted_triple[1][1]:  # Up diagonal
                                 action = 156 + (row-1) * 4 + (col-1)  # After vertical graduations
                                 valid_moves[action] = 1
-                                #print(f"{action} is valid for up diagonal graduation centered at ({row}, {col})")
                             else:  # Down diagonal
                                 action = 172 + (row-1) * 4 + (col-1)  # After up diagonals
                                 valid_moves[action] = 1
-                                #print(f"{action} is valid for down diagonal graduation centered at ({row}, {col})")
 
         # If waiting for placement, only placement moves are valid
         else:
