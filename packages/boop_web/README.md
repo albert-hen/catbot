@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# Boop Web UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Browser-based implementation of the Boop board game with React, TypeScript, and ONNX Runtime for AI inference.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Play the Boop game directly in your browser
+- AI opponents powered by AlphaZero neural networks (runs locally via ONNX Runtime)
+- Real-time game state visualization
+- Responsive board UI with piece interactions
 
-## React Compiler
+## Quick Start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Installation
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+Open http://localhost:5173 in your browser.
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+Output will be in the `dist/` directory.
+
+### Testing
+
+```bash
+npm run test          # Run tests in watch mode
+npm run test:run      # Run tests once
+```
+
+## Architecture
+
+The web UI is a single-page React application that:
+- Loads the ONNX model from `public/model.onnx` (exported via `scripts/export_onnx.py`)
+- Implements Monte Carlo Tree Search (MCTS) in TypeScript for AlphaZero agent decisions
+- Converts game state to tensor format matching the Python backend
+
+### Key Files
+
+- `src/components/Board.tsx` - Game board UI and piece rendering
+- `src/game/GameState.ts` - Game state management
+- `src/game/MCTS.ts` - Monte Carlo Tree Search implementation
+- `src/game/NeuralNetwork.ts` - ONNX model inference wrapper
+- `src/game/tensor.ts` - Game state to tensor conversion
+
+## Model Setup
+
+To use AlphaZero agents in the web UI:
+
+1. **Set up Python environment** (from project root):
+   ```bash
+   cd /path/to/catbot
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. **Train AlphaZero model**:
+   ```bash
+   python -m packages.boop_agents.alphazero.main
+   ```
+
+3. **Export model to ONNX** (automatically saves to `packages/boop_web/public/model.onnx`):
+   ```bash
+   python scripts/export_onnx.py
+   ```
+
+4. **Restart dev server** (from `packages/boop_web/`):
+   ```bash
+   npm run dev
+   ```

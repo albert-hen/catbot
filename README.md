@@ -1,100 +1,69 @@
-# catbot
+# Catbot
 
-boop with alphazero (coming soon)
+Implementation of the Boop board game with AI agents, featuring minimax and AlphaZero players.
 
-## Installation
+## Project Overview
 
-1. Clone the repository:
-    ```bash
-    git clone https://github.com/albert-hen/catbot.git
-    cd catbot
-    ```
+This project provides multiple ways to play and develop AI for the Boop board game:
 
-2. Create and activate a virtual environment (recommended):
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
+- **[Desktop UI](packages/boop_pygame/)** - Pygame application with human and AI players
+- **[Web UI](packages/boop_web/)** - Browser-based React app with ONNX model inference
+- **[AlphaZero Training](packages/boop_agents/alphazero/)** - Self-play reinforcement learning
+- **[Game Engine](packages/boop_core/)** - Core game logic and rules
 
-3. Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
+## Quick Start
 
-## Running the Game
+### Play the Desktop Game
 
-From the project root directory, start the game with:
 ```bash
+# Setup
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Run
 python -m packages.boop_pygame.main
 ```
 
-## Running Tests
+See [packages/boop_pygame/](packages/boop_pygame/) for AI opponent options and advanced usage.
 
-To run unit tests:
+### Play in Browser
+
 ```bash
+cd packages/boop_web
+npm install
+npm run dev
+```
+
+See [packages/boop_web/README.md](packages/boop_web/README.md) for details.
+
+## Project Structure
+
+```
+packages/
+├── boop_core/          # Game logic (board state, rules, movement)
+├── boop_pygame/        # Desktop Pygame UI
+├── boop_agents/
+│   ├── minimax/        # Minimax search AI
+│   └── alphazero/      # AlphaZero training and agent
+└── boop_web/           # React/TypeScript web UI
+```
+
+## Documentation
+
+- **Game Rules**: [context/boop_game_rules.md](context/boop_game_rules.md)
+- **UI Specification**: [context/ui_requirements.md](context/ui_requirements.md)
+- **Developer Guide**: [.github/copilot-instructions.md](.github/copilot-instructions.md)
+
+## Testing
+
+```bash
+# Core game tests
 python -m unittest packages.boop_core.tests.test_game
+
+# AlphaZero tests
+python -m unittest packages.boop_agents.alphazero.tests.test_boop_game
+
+# Web UI tests
+cd packages/boop_web && npm run test
 ```
-
-## Running Demo Scripts
-
-To run a demo (e.g., random game):
-```bash
-python -m packages.boop_pygame.demo.demo_random_game_state_ui
-```
-
-## AlphaZero Training
-```bash
-python -m packages.boop_agents.alphazero.main
-```
-
-
-# Boop Game Agent System
-
-The Boop game now supports a flexible agent system where you can configure different AI agents for each player.
-
-## Running the Game
-
-### Human vs Human (default)
-```bash
-python -m packages.boop_pygame.main
-```
-
-### Human (Orange) vs AI (Gray)
-```bash
-python -m packages.boop_pygame.main --gray-ai
-```
-
-### AI (Orange) vs Human (Gray)
-```bash
-python -m packages.boop_pygame.main --orange-ai
-```
-
-### AI vs AI (watch two agents play)
-```bash
-python -m packages.boop_pygame.main --both-ai
-```
-
-## Agent Interface
-
-Agents are functions that take a `GameState` object and return the best move as a tuple:
-- `("place", (piece_type, position))` for piece placement moves
-- `("graduate", graduation_choice)` for graduation moves
-
-Example agent function:
-```python
-def my_agent(game_state):
-    # Analyze game_state and return best move
-    return ("place", ("ok", (0, 0)))  # Place orange kitten at (0,0)
-```
-
-## Available Agents
-
-- `minimax_agent`: Uses minimax algorithm with evaluation function
-- Custom agents can be created following the same interface
-
-## UI Behavior
-
-- When a player has an agent assigned, the UI ignores human input for that player
-- Agents automatically make moves with a small delay for better visualization
-- The UI shows which players are controlled by AI vs human
-- All game mechanics work the same regardless of agent configuration
