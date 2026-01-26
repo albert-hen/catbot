@@ -49,12 +49,6 @@ packages/
 └── boop_web/           # React/TypeScript web UI
 ```
 
-## Documentation
-
-- **Game Rules**: [context/boop_game_rules.md](context/boop_game_rules.md)
-- **UI Specification**: [context/ui_requirements.md](context/ui_requirements.md)
-- **Developer Guide**: [.github/copilot-instructions.md](.github/copilot-instructions.md)
-
 ## Testing
 
 ```bash

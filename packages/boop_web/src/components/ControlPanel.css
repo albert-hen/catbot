@@ -67,10 +67,11 @@
 
 .piece-button {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
-  padding: 12px 16px;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
   border: 2px solid #ddd;
   border-radius: 8px;
   background: white;
@@ -91,17 +92,7 @@
 }
 
 .piece-button:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
-}
-
-.piece-button.unavailable {
-  opacity: 0.4;
-  background: #f5f5f5;
-}
-
-.piece-button.unavailable .piece-sprite {
-  filter: grayscale(100%);
 }
 
 .piece-label {
@@ -109,28 +100,70 @@
 }
 
 .piece-count {
-  color: #888;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* Piece Groups */
+.piece-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.piece-group {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+  background: #f9f9f9;
+}
+
+.piece-group.orange.active {
+  background: #FFE0B2;
+  border-color: #FFB74D;
+}
+
+.piece-group.gray.active {
+  background: #CFD8DC;
+  border-color: #90A4AE;
 }
 
 .graduation-buttons {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 .graduation-button {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 12px 16px;
+  padding: 10px 8px;
   border: 2px solid #E91E63;
   border-radius: 8px;
   background: white;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 1rem;
-  text-align: left;
+  font-size: 0.9rem;
+  text-align: center;
+  min-height: 60px;
+}
+
+.graduation-type {
+  font-weight: 600;
+  color: #333;
+}
+
+.graduation-coords {
+  font-size: 0.8rem;
+  color: #666;
+  word-break: break-all;
 }
 
 .graduation-button:hover:not(:disabled) {
@@ -206,9 +239,9 @@
 
 /* Piece sprites for buttons */
 .piece-sprite {
-  width: 36px;
-  height: 36px;
-  background-size: 72px 36px;
+  width: 60px;
+  height: 60px;
+  background-size: 120px 60px;
   background-repeat: no-repeat;
 }
 
@@ -231,7 +264,7 @@
 }
 
 .piece-sprite.sprite-orange-kitten {
-  background-position: -36px 0;
+  background-position: -60px 0;
 }
 
 .piece-sprite-small.sprite-orange-kitten {
@@ -249,7 +282,7 @@
 }
 
 .piece-sprite.sprite-orange-cat {
-  background-position: -36px 0;
+  background-position: -60px 0;
 }
 
 .piece-sprite-small.sprite-orange-cat {

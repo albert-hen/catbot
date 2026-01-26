@@ -36,6 +36,7 @@
   justify-content: center;
   z-index: 20;
   background: rgba(255, 255, 255, 0.4);
+  border-radius: 12px;
 }
 
 .setup-overlay-text {
