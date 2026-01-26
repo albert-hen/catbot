@@ -21,8 +21,13 @@ function App() {
     orange: 'human',
     gray: 'human',
   });
-  const [aiConfig, setAIConfig] = useState<AIConfig>({
-    numSimulations: 256,
+  const [aiConfig, setAIConfig] = useState<AIConfig>(() => {
+    // Load delay from localStorage if available
+    const savedDelay = localStorage.getItem('boop_ai_delay');
+    return { 
+      numSimulations: 256,
+      moveDelayMs: savedDelay !== null ? parseInt(savedDelay, 10) : 1000,
+    };
   });
   const [animationConfig, setAnimationConfig] = useState<AnimationConfig>(() => {
     // Load from localStorage if available
@@ -60,12 +65,20 @@ function App() {
     lastMoveHighlights,
     moveEffects,
     canUndo,
+    isPaused,
+    isViewingHistory,
+    historyIndex,
+    historyLength,
+    canGoForward,
     selectPieceType,
     placePiece,
     selectGraduation,
     setHoveredGraduation,
     resetGame,
     undo,
+    togglePause,
+    goForward,
+    goToPresent,
   } = useBoopGame(nnet, {
     playerConfig,
     aiConfig,
@@ -86,9 +99,10 @@ function App() {
     resetGame();
   }, [resetGame]);
   
-  // Handle AI config change
+  // Handle AI config change (persist delay to localStorage)
   const handleAIConfigChange = useCallback((config: AIConfig) => {
     setAIConfig(config);
+    localStorage.setItem('boop_ai_delay', String(config.moveDelayMs));
   }, []);
   
   // Handle animation config change (persist to localStorage)
@@ -135,6 +149,14 @@ function App() {
               onReset={resetGame}
               canUndo={canUndo}
               onUndo={undo}
+              isPaused={isPaused}
+              isViewingHistory={isViewingHistory}
+              historyIndex={historyIndex}
+              historyLength={historyLength}
+              canGoForward={canGoForward}
+              onTogglePause={togglePause}
+              onGoForward={goForward}
+              onGoToPresent={goToPresent}
               modelLoaded={modelLoaded}
               modelLoading={modelLoading}
             />

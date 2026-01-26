@@ -57,6 +57,25 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     }
   };
 
+  // Generate status message - use consistent player name width
+  const getStatusMessage = (): { text: string; isThinking: boolean } => {
+    if (gameState.gameOver) {
+      return { text: `Game over - ${gameState.winner === 'orange' ? 'Orange' : 'Gray'} wins!`, isThinking: false };
+    }
+    
+    // Use "Orange" for sizing since it's longer - Gray will just have extra space
+    const playerName = isOrangeTurn ? 'Orange' : 'Gray';
+    const action = isGraduation ? 'choose graduation' : 'place a piece';
+    
+    if (isAIThinking) {
+      return { text: `${playerName} AI is thinking...`, isThinking: true };
+    }
+    
+    return { text: `Waiting for ${playerName} to ${action}`, isThinking: false };
+  };
+
+  const status = getStatusMessage();
+
   return (
     <div className="control-panel">
       {/* Current Turn */}
@@ -67,24 +86,13 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             : <><span className={`turn-icon ${isOrangeTurn ? 'orange' : 'gray'}`}></span> {isOrangeTurn ? 'Orange' : 'Gray'}'s Turn</>
           }
         </h2>
-        {isAIThinking && (
-          <div className="ai-thinking">
-            <span className="spinner"></span>
-            AI is thinking...
-          </div>
-        )}
       </div>
 
-      {/* State Mode */}
-      {!gameState.gameOver && (
-        <div className="state-mode">
-          {isGraduation ? (
-            <p>Choose pieces to graduate</p>
-          ) : (
-            <p>Place a piece on the board</p>
-          )}
-        </div>
-      )}
+      {/* Status Area - always visible to prevent layout shifts */}
+      <div className="game-status">
+        {status.isThinking && <span className="spinner"></span>}
+        <span className="status-text">{status.text}</span>
+      </div>
 
       {/* Piece Selection (only during placement) */}
       {!gameState.gameOver && !isGraduation && (

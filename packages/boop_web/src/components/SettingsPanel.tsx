@@ -15,6 +15,15 @@ interface SettingsPanelProps {
   onReset: () => void;
   canUndo: boolean;
   onUndo: () => void;
+  // Pause/replay controls
+  isPaused: boolean;
+  isViewingHistory: boolean;
+  historyIndex: number;
+  historyLength: number;
+  canGoForward: boolean;
+  onTogglePause: () => void;
+  onGoForward: () => void;
+  onGoToPresent: () => void;
   modelLoaded: boolean;
   modelLoading: boolean;
 }
@@ -29,6 +38,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onReset,
   canUndo,
   onUndo,
+  isPaused,
+  isViewingHistory,
+  historyIndex,
+  historyLength,
+  canGoForward,
+  onTogglePause,
+  onGoForward,
+  onGoToPresent,
   modelLoaded,
   modelLoading,
 }) => {
@@ -45,6 +62,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       onAIConfigChange({ ...aiConfig, numSimulations: value });
     }
   };
+  
+  const handleDelayChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value >= 0) {
+      onAIConfigChange({ ...aiConfig, moveDelayMs: value });
+    }
+  };
+  
+  // Check if any AI is playing
+  const hasAI = playerConfig.orange === 'ai' || playerConfig.gray === 'ai';
 
   return (
     <div className="settings-panel">
@@ -87,7 +114,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       </div>
 
       {/* AI Configuration */}
-      {(playerConfig.orange === 'ai' || playerConfig.gray === 'ai') && (
+      {hasAI && (
         <div className="ai-config">
           <label>
             <span>MCTS Simulations</span>
@@ -103,6 +130,67 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <p className="config-hint">
             More simulations = stronger play but slower
           </p>
+          <label>
+            <span>AI Move Delay (ms)</span>
+            <input
+              type="number"
+              min="0"
+              max="5000"
+              step="100"
+              value={aiConfig.moveDelayMs}
+              onChange={handleDelayChange}
+            />
+          </label>
+          <p className="config-hint">
+            Pause before each AI move (0 = instant)
+          </p>
+        </div>
+      )}
+      
+      {/* Pause/Replay Controls (only show when AI is playing) */}
+      {hasAI && (
+        <div className="pause-controls">
+          <button
+            className={`pause-button ${isPaused ? 'paused' : ''}`}
+            onClick={onTogglePause}
+            title="Pause/Resume (P)"
+          >
+            {isPaused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+          
+          {isPaused && (
+            <div className="history-navigation">
+              <div className="history-position">
+                Move {historyIndex} / {historyLength}
+                {isViewingHistory && ' (viewing history)'}
+              </div>
+              <div className="history-buttons">
+                <button
+                  onClick={onUndo}
+                  disabled={historyIndex === 0}
+                  title="Go back (U)"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={onGoForward}
+                  disabled={!canGoForward}
+                  title="Go forward (I)"
+                >
+                  Forward →
+                </button>
+                {isViewingHistory && (
+                  <button
+                    onClick={onGoToPresent}
+                    className="go-to-present"
+                    title="Return to current game"
+                  >
+                    ⏭ Present
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -120,14 +208,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
       {/* Game Controls */}
       <div className="game-controls">
-        <button 
-          className="undo-button" 
-          onClick={onUndo}
-          disabled={!canUndo}
-          title="Undo last move (U)"
-        >
-          ↩ Undo
-        </button>
+        {!hasAI && (
+          <button 
+            className="undo-button" 
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Undo last move (U)"
+          >
+            ↩ Undo
+          </button>
+        )}
         <button className="reset-button" onClick={onReset}>
           New Game
         </button>

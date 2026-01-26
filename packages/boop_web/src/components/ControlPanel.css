@@ -19,13 +19,24 @@
   color: #333;
 }
 
-.ai-thinking {
+.game-status {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
-  color: #666;
+  min-height: 24px;
+  /* Fixed width to prevent layout shifts between "Orange" and "Gray" */
+  min-width: 260px;
+  width: 260px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: #e9ecef;
+  border-radius: 6px;
+  color: #555;
   font-size: 0.9rem;
+}
+
+.game-status .status-text {
+  flex: 1;
 }
 
 .spinner {
@@ -35,16 +46,11 @@
   border-top-color: #666;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  flex-shrink: 0;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.state-mode p {
-  margin: 0;
-  color: #666;
-  font-style: italic;
 }
 
 .piece-selection h3,

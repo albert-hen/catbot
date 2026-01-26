@@ -229,3 +229,89 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Pause/Replay controls */
+.pause-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #E3F2FD;
+  border-radius: 8px;
+  border: 1px solid #90CAF9;
+}
+
+.pause-button {
+  padding: 12px 24px;
+  border: 2px solid #2196F3;
+  border-radius: 8px;
+  background: white;
+  color: #1976D2;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pause-button:hover {
+  background: #E3F2FD;
+}
+
+.pause-button.paused {
+  background: #4CAF50;
+  border-color: #4CAF50;
+  color: white;
+}
+
+.pause-button.paused:hover {
+  background: #45a049;
+}
+
+.history-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-position {
+  font-size: 0.9rem;
+  color: #1565C0;
+  text-align: center;
+  font-weight: 500;
+}
+
+.history-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.history-buttons button {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #90CAF9;
+  border-radius: 6px;
+  background: white;
+  color: #1976D2;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-buttons button:hover:not(:disabled) {
+  background: #E3F2FD;
+}
+
+.history-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.history-buttons button.go-to-present {
+  background: #FFF3E0;
+  border-color: #FFB74D;
+  color: #E65100;
+}
+
+.history-buttons button.go-to-present:hover {
+  background: #FFE0B2;
+}
