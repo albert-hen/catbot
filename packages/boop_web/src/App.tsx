@@ -64,12 +64,12 @@ function App() {
     isAnimating,
     lastMoveHighlights,
     moveEffects,
-    canUndo,
     gamePhase,
     isPaused,
     isViewingHistory,
     historyIndex,
     historyLength,
+    canGoBack,
     canGoForward,
     selectPieceType,
     placePiece,
@@ -77,10 +77,11 @@ function App() {
     setHoveredGraduation,
     startGame,
     resetGame,
-    undo,
     togglePause,
+    goBack,
     goForward,
     goToPresent,
+    playFromHistory,
   } = useBoopGame(nnet, {
     playerConfig,
     aiConfig,
@@ -150,16 +151,17 @@ function App() {
               onAnimationConfigChange={handleAnimationConfigChange}
               onStartGame={startGame}
               onReset={resetGame}
-              canUndo={canUndo}
-              onUndo={undo}
               isPaused={isPaused}
               isViewingHistory={isViewingHistory}
               historyIndex={historyIndex}
               historyLength={historyLength}
+              canGoBack={canGoBack}
               canGoForward={canGoForward}
               onTogglePause={togglePause}
+              onGoBack={goBack}
               onGoForward={goForward}
               onGoToPresent={goToPresent}
+              onPlayFromHistory={playFromHistory}
               modelLoaded={modelLoaded}
               modelLoading={modelLoading}
             />

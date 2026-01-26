@@ -57,16 +57,16 @@ export interface UseBoopGameResult {
   isAnimating: boolean;
   lastMoveHighlights: LastMoveHighlights;
   moveEffects: MoveEffects | null;
-  canUndo: boolean;
   
   // Game phase
   gamePhase: GamePhase;
   
-  // Pause/replay state (for AI vs AI)
+  // Pause/replay state
   isPaused: boolean;
   isViewingHistory: boolean;
   historyIndex: number;
   historyLength: number;
+  canGoBack: boolean;
   canGoForward: boolean;
   
   // Actions
@@ -76,10 +76,11 @@ export interface UseBoopGameResult {
   setHoveredGraduation: (choice: GraduationChoice | null) => void;
   startGame: () => void;
   resetGame: () => void;
-  undo: () => void;
   togglePause: () => void;
+  goBack: () => void;
   goForward: () => void;
   goToPresent: () => void;
+  playFromHistory: () => void;
 }
 
 export function useBoopGame(
@@ -250,14 +251,30 @@ export function useBoopGame(
     checkAndMakeAIMove();
   }, [gameState.currentTurn, gameState.stateMode, isAnimating, isPaused, viewingHistoryIndex, gamePhase, checkAndMakeAIMove]);
   
-  // Toggle pause (only effective when at least one AI is playing)
+  // Toggle pause (works for all player configs during playing phase)
   const togglePause = useCallback(() => {
+    if (gamePhase !== 'playing') return;
     setIsPaused(prev => !prev);
     // When unpausing, return to present if viewing history
     if (isPaused && viewingHistoryIndex !== null) {
       setViewingHistoryIndex(null);
     }
-  }, [isPaused, viewingHistoryIndex]);
+  }, [isPaused, viewingHistoryIndex, gamePhase]);
+  
+  // Go back in history (while paused or game over)
+  const goBack = useCallback(() => {
+    if (!isPaused && gamePhase !== 'game_over') return;
+    
+    if (viewingHistoryIndex === null) {
+      // Currently at present, go to last history entry
+      if (gameHistory.length > 0) {
+        setViewingHistoryIndex(gameHistory.length - 1);
+      }
+    } else if (viewingHistoryIndex > 0) {
+      // Go further back
+      setViewingHistoryIndex(viewingHistoryIndex - 1);
+    }
+  }, [isPaused, viewingHistoryIndex, gameHistory.length, gamePhase]);
   
   // Go forward in history (while paused or game over)
   const goForward = useCallback(() => {
@@ -275,36 +292,32 @@ export function useBoopGame(
     setViewingHistoryIndex(null);
   }, []);
   
-  // Undo function - works for both human and AI players
-  const undo = useCallback(() => {
-    // If game is over or paused and viewing history, navigate backward in history view
-    if ((isPaused || gamePhase === 'game_over') && viewingHistoryIndex !== null) {
-      if (viewingHistoryIndex > 0) {
-        setViewingHistoryIndex(viewingHistoryIndex - 1);
-      }
-      return;
-    }
+  // Play from the currently viewed historical state
+  const playFromHistory = useCallback(() => {
+    if (viewingHistoryIndex === null) return; // Already at present
     
-    // If game is over or paused but at present, start viewing history
-    if ((isPaused || gamePhase === 'game_over') && gameHistory.length > 0) {
-      setViewingHistoryIndex(gameHistory.length - 1);
-      return;
-    }
+    // Get the historical state we're viewing
+    const historicalState = gameHistory[viewingHistoryIndex];
     
-    // Normal undo (not paused, game not over)
-    if (gameHistory.length === 0 || isAIThinking || isAnimating) return;
+    // Make it the new present
+    setGameState(historicalState.clone());
     
-    // Pop from history and restore that state
-    const previousState = gameHistory[gameHistory.length - 1];
-    setGameState(previousState);
-    setGameHistory(gameHistory.slice(0, -1));
+    // Truncate history to before this point
+    setGameHistory(gameHistory.slice(0, viewingHistoryIndex));
+    
+    // Clear UI state
     setSelectedPieceType(null);
     setHoveredGraduation(null);
     setMoveEffects(null);
     setLastMoveHighlights({ placedAt: null, graduatedPositions: [] });
-  }, [gameHistory, isAIThinking, isAnimating, isPaused, viewingHistoryIndex, gamePhase]);
+    
+    // Resume play
+    setViewingHistoryIndex(null);
+    setIsPaused(false);
+    setGamePhase('playing'); // In case we were in game_over
+  }, [viewingHistoryIndex, gameHistory]);
   
-  // Keyboard handler for undo/forward/pause
+  // Keyboard handler for history navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
@@ -316,16 +329,14 @@ export function useBoopGame(
         return;
       }
       
-      // Undo (u) - works when paused, game over, or for history navigation
-      if (key === 'u') {
-        if (isPaused || gamePhase === 'game_over' || (!isAIThinking && !isAnimating && gameHistory.length > 0)) {
-          e.preventDefault();
-          undo();
-        }
+      // Back (u) - when paused or game over
+      if (key === 'u' && (isPaused || gamePhase === 'game_over')) {
+        e.preventDefault();
+        goBack();
         return;
       }
       
-      // Forward (i) - when paused or game over and viewing history
+      // Forward (i) - when paused or game over
       if (key === 'i' && (isPaused || gamePhase === 'game_over')) {
         e.preventDefault();
         goForward();
@@ -335,7 +346,7 @@ export function useBoopGame(
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePause, undo, goForward, isPaused, isAIThinking, isAnimating, gameHistory.length, gamePhase]);
+  }, [togglePause, goBack, goForward, isPaused, gamePhase]);
   
   // Save state to history before each move
   const pushToHistory = useCallback(() => {
@@ -449,9 +460,9 @@ export function useBoopGame(
   }, []);
   
   // Derived state
-  const canUndo = gameHistory.length > 0 && !isAIThinking && !isAnimating;
   const isViewingHistory = viewingHistoryIndex !== null;
   const historyIndex = viewingHistoryIndex ?? gameHistory.length;
+  const canGoBack = (isPaused || gamePhase === 'game_over') && (viewingHistoryIndex === null ? gameHistory.length > 0 : viewingHistoryIndex > 0);
   const canGoForward = (isPaused || gamePhase === 'game_over') && viewingHistoryIndex !== null;
   
   // The state to display (either current or historical)
@@ -467,12 +478,12 @@ export function useBoopGame(
     isAnimating,
     lastMoveHighlights: isViewingHistory ? { placedAt: null, graduatedPositions: [] } : lastMoveHighlights,
     moveEffects: isViewingHistory ? null : moveEffects,
-    canUndo,
     gamePhase,
     isPaused,
     isViewingHistory,
     historyIndex,
     historyLength: gameHistory.length,
+    canGoBack,
     canGoForward,
     selectPieceType,
     placePiece,
@@ -480,9 +491,10 @@ export function useBoopGame(
     setHoveredGraduation,
     startGame,
     resetGame,
-    undo,
     togglePause,
+    goBack,
     goForward,
     goToPresent,
+    playFromHistory,
   };
 }

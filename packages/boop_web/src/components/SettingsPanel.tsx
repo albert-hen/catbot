@@ -16,17 +16,18 @@ interface SettingsPanelProps {
   onAnimationConfigChange: (config: AnimationConfig) => void;
   onStartGame: () => void;
   onReset: () => void;
-  canUndo: boolean;
-  onUndo: () => void;
   // Pause/replay controls
   isPaused: boolean;
   isViewingHistory: boolean;
   historyIndex: number;
   historyLength: number;
+  canGoBack: boolean;
   canGoForward: boolean;
   onTogglePause: () => void;
+  onGoBack: () => void;
   onGoForward: () => void;
   onGoToPresent: () => void;
+  onPlayFromHistory: () => void;
   modelLoaded: boolean;
   modelLoading: boolean;
 }
@@ -41,16 +42,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onAnimationConfigChange,
   onStartGame,
   onReset,
-  canUndo,
-  onUndo,
   isPaused,
   isViewingHistory,
   historyIndex,
   historyLength,
+  canGoBack,
   canGoForward,
   onTogglePause,
+  onGoBack,
   onGoForward,
   onGoToPresent,
+  onPlayFromHistory,
   modelLoaded,
   modelLoading,
 }) => {
@@ -182,8 +184,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </div>
       )}
       
-      {/* Pause/Replay Controls (only show when AI is playing during playing/game_over phase) */}
-      {hasAI && (isPlaying || isGameOver) && (
+      {/* Pause/Replay Controls (show during playing/game_over phase for ALL configs) */}
+      {(isPlaying || isGameOver) && (
         <div className="pause-controls">
           {isPlaying && (
             <button
@@ -203,8 +205,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
               <div className="history-buttons">
                 <button
-                  onClick={onUndo}
-                  disabled={historyIndex === 0}
+                  onClick={onGoBack}
+                  disabled={!canGoBack}
                   title="Go back (U)"
                 >
                   ← Back
@@ -216,16 +218,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 >
                   Forward →
                 </button>
-                {isViewingHistory && (
-                  <button
-                    onClick={onGoToPresent}
-                    className="go-to-present"
-                    title="Return to current game"
-                  >
-                    ⏭ Present
-                  </button>
-                )}
+                <button
+                  onClick={onGoToPresent}
+                  className="go-to-present"
+                  disabled={!isViewingHistory}
+                  title="Return to current game"
+                >
+                  ⏭ Present
+                </button>
               </div>
+              {isViewingHistory && (
+                <button
+                  onClick={onPlayFromHistory}
+                  className="play-from-history"
+                  title="Continue game from this point"
+                >
+                  ▶ Play from here
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -245,18 +255,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
       {/* Game Controls */}
       <div className="game-controls">
-        {/* Undo button only for human vs human during play */}
-        {!hasAI && isPlaying && (
-          <button 
-            className="undo-button" 
-            onClick={onUndo}
-            disabled={!canUndo}
-            title="Undo last move (U)"
-          >
-            ↩ Undo
-          </button>
-        )}
-        
         {/* Start Game button in setup phase */}
         {isSetup && (
           <button 
