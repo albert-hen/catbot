@@ -376,7 +376,7 @@ export function useBoopGame(
   const placePiece = useCallback((position: Position) => {
     if (gameState.stateMode !== 'waiting_for_placement') return;
     if (!selectedPieceType) return;
-    if (isAIThinking || isAnimating) return;
+    if (isAIThinking || isAnimating || isPaused) return;
     
     // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
@@ -406,11 +406,11 @@ export function useBoopGame(
     } catch (error) {
       console.error('Invalid move:', error);
     }
-  }, [gameState, selectedPieceType, isAIThinking, isAnimating, options, pushToHistory]);
+  }, [gameState, selectedPieceType, isAIThinking, isAnimating, isPaused, options, pushToHistory]);
   
   const selectGraduation = useCallback((choice: GraduationChoice) => {
     if (gameState.stateMode !== 'waiting_for_graduation_choice') return;
-    if (isAIThinking || isAnimating) return;
+    if (isAIThinking || isAnimating || isPaused) return;
     
     // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
@@ -432,7 +432,7 @@ export function useBoopGame(
     } catch (error) {
       console.error('Invalid graduation choice:', error);
     }
-  }, [gameState, isAIThinking, isAnimating, options, pushToHistory]);
+  }, [gameState, isAIThinking, isAnimating, isPaused, options, pushToHistory]);
   
   // Start the game (transition from setup to playing)
   const startGame = useCallback(() => {

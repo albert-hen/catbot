@@ -41,19 +41,20 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   const formatGraduationChoice = (choice: GraduationChoice): string => {
     if (choice.length === 1) {
       const [row, col] = choice[0];
-      return `Single at (${row + 1}, ${col + 1})`;
+      return `Single at (${row + 1},${col + 1})`;
     }
     
-    // Determine orientation
+    // Determine orientation and format coordinates
     const [r0, c0] = choice[0];
     const [r1, c1] = choice[1];
+    const [r2, c2] = choice[2];
     
     if (r0 === r1) {
-      return `Horizontal line`;
+      return `Horizontal Line at (${r0 + 1},${c0 + 1})->(${r1 + 1},${c1 + 1})->(${r2 + 1},${c2 + 1})`;
     } else if (c0 === c1) {
-      return `Vertical line`;
+      return `Vertical Line at (${r0 + 1},${c0 + 1})->(${r1 + 1},${c1 + 1})->(${r2 + 1},${c2 + 1})`;
     } else {
-      return `Diagonal line`;
+      return `Diagonal Line at (${r0 + 1},${c0 + 1})->(${r1 + 1},${c1 + 1})->(${r2 + 1},${c2 + 1})`;
     }
   };
 
@@ -65,7 +66,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     
     // Use "Orange" for sizing since it's longer - Gray will just have extra space
     const playerName = isOrangeTurn ? 'Orange' : 'Gray';
-    const action = isGraduation ? 'choose graduation' : 'place a piece';
+    const action = isGraduation ? 'graduate' : 'place';
     
     if (isAIThinking) {
       return { text: `${playerName} AI is thinking...`, isThinking: true };
@@ -134,9 +135,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                 disabled={isAIThinking}
               >
                 {formatGraduationChoice(choice)}
-                <span className="graduation-positions">
-                  {choice.map(([r, c]) => `(${r + 1},${c + 1})`).join(' → ')}
-                </span>
               </button>
             ))}
           </div>
