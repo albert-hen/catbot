@@ -24,9 +24,7 @@
   align-items: center;
   gap: 8px;
   min-height: 24px;
-  /* Fixed width to prevent layout shifts between "Orange" and "Gray" */
-  min-width: 260px;
-  width: 260px;
+  width: 100%;
   box-sizing: border-box;
   padding: 8px 12px;
   background: #e9ecef;

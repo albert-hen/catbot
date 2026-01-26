@@ -120,6 +120,17 @@ function App() {
       
       <main className="app-main">
         <div className="game-container">
+          <div className="left-panel">
+            <ControlPanel
+              gameState={gameState}
+              selectedPieceType={selectedPieceType}
+              onSelectPieceType={selectPieceType}
+              onSelectGraduation={selectGraduation}
+              onHoverGraduation={setHoveredGraduation}
+              isAIThinking={isAIThinking}
+            />
+          </div>
+          
           <Board
             gameState={gameState}
             onCellClick={handleCellClick}
@@ -131,16 +142,7 @@ function App() {
             gamePhase={gamePhase}
           />
           
-          <div className="side-panel">
-            <ControlPanel
-              gameState={gameState}
-              selectedPieceType={selectedPieceType}
-              onSelectPieceType={selectPieceType}
-              onSelectGraduation={selectGraduation}
-              onHoverGraduation={setHoveredGraduation}
-              isAIThinking={isAIThinking}
-            />
-            
+          <div className="right-panel">
             <SettingsPanel
               playerConfig={playerConfig}
               aiConfig={aiConfig}
