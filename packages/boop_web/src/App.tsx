@@ -2,20 +2,15 @@
  * Boop Game - Main Application
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Board, ControlPanel, SettingsPanel } from './components';
-import { useBoopGame } from './hooks';
+import { useState, useCallback } from 'react';
+import { Board, ControlPanel, SettingsPanel, AnalysisPanel } from './components';
+import { useBoopGame, useAnalysis } from './hooks';
 import type { PlayerConfig, AIConfig, AnimationConfig } from './hooks';
-import { ONNXNeuralNetwork } from './game';
 import type { Position } from './game';
+import type { AnalysisConfig } from './game/analysisTypes';
 import './App.css';
 
 function App() {
-  // Neural network state
-  const [nnet, setNnet] = useState<ONNXNeuralNetwork | null>(null);
-  const [modelLoading, setModelLoading] = useState(false);
-  const [modelLoaded, setModelLoaded] = useState(false);
-  
   // Game configuration
   const [playerConfig, setPlayerConfig] = useState<PlayerConfig>({
     orange: 'human',
@@ -34,33 +29,30 @@ function App() {
     const saved = localStorage.getItem('boop_animation_enabled');
     return { enabled: saved !== null ? saved === 'true' : true };
   });
-  
-  // Load the model on mount
-  useEffect(() => {
-    const loadModel = async () => {
-      setModelLoading(true);
-      try {
-        const network = new ONNXNeuralNetwork('/model.onnx');
-        await network.load();
-        setNnet(network);
-        setModelLoaded(true);
-        console.log('Model loaded successfully');
-      } catch (error) {
-        console.error('Failed to load model:', error);
-      } finally {
-        setModelLoading(false);
-      }
+
+  // Analysis configuration
+  const [analysisConfig, setAnalysisConfig] = useState<AnalysisConfig>(() => {
+    const saved = localStorage.getItem('boop_analysis_enabled');
+    return {
+      enabled: saved !== null ? saved === 'true' : false,
+      simulationsPerCycle: 100,
+      topMovesCount: 5,
+      updateIntervalMs: 500,
+      showPolicyOverlay: true,
+      overlayThreshold: 0.01,
     };
-    
-    loadModel();
-  }, []);
-  
-  // Game hook
+  });
+
+  // Analysis highlight (when hovering over a move in the analysis panel)
+  const [analysisHighlight, setAnalysisHighlight] = useState<Position | null>(null);
+
+  // Game hook (AI model is loaded in the worker)
   const {
     gameState,
     selectedPieceType,
     hoveredGraduation,
     isAIThinking,
+    isAIReady,
     isAnimating,
     lastMoveHighlights,
     moveEffects,
@@ -82,10 +74,27 @@ function App() {
     goForward,
     goToPresent,
     playFromHistory,
-  } = useBoopGame(nnet, {
+  } = useBoopGame({
     playerConfig,
     aiConfig,
     animationConfig,
+  });
+
+  // Determine current player for analysis
+  const currentPlayer: 1 | -1 = gameState.currentTurn === 'orange' ? 1 : -1;
+
+  // Analysis hook
+  const {
+    analysis,
+    isAnalyzing,
+    isReady: analysisReady,
+    error: analysisError,
+    config: analysisConfigState,
+    updateConfig: updateAnalysisConfig,
+  } = useAnalysis(gameState, currentPlayer, {
+    enabled: analysisConfig.enabled && !gameState.gameOver && gamePhase !== 'setup',
+    modelUrl: '/model.onnx',
+    config: analysisConfig,
   });
   
   // Handle cell click
@@ -94,6 +103,21 @@ function App() {
       placePiece(position);
     }
   }, [gameState.stateMode, placePiece]);
+
+  // Handle analysis config change
+  const handleAnalysisConfigChange = useCallback((config: Partial<AnalysisConfig>) => {
+    setAnalysisConfig(prev => {
+      const updated = { ...prev, ...config };
+      localStorage.setItem('boop_analysis_enabled', String(updated.enabled));
+      updateAnalysisConfig(updated);
+      return updated;
+    });
+  }, [updateAnalysisConfig]);
+
+  // Handle move hover from analysis panel
+  const handleMoveHover = useCallback((position: Position | null) => {
+    setAnalysisHighlight(position);
+  }, []);
   
   // Handle player config change (only in setup phase, so no reset needed)
   const handlePlayerConfigChange = useCallback((config: PlayerConfig) => {
@@ -117,7 +141,7 @@ function App() {
       <header className="app-header">
         <h1>boop.</h1>
       </header>
-      
+
       <main className="app-main">
         <div className="game-container">
           <div className="left-panel">
@@ -128,9 +152,10 @@ function App() {
               onSelectGraduation={selectGraduation}
               onHoverGraduation={setHoveredGraduation}
               isAIThinking={isAIThinking}
+              analysis={analysisConfig.showPolicyOverlay ? analysis : null}
             />
           </div>
-          
+
           <Board
             gameState={gameState}
             onCellClick={handleCellClick}
@@ -140,8 +165,11 @@ function App() {
             animationEnabled={animationConfig.enabled}
             isAnimating={isAnimating}
             gamePhase={gamePhase}
+            policyOverlay={analysisConfig.showPolicyOverlay ? analysis?.policyOverlay : null}
+            showPolicyOverlay={analysisConfig.enabled && analysisConfig.showPolicyOverlay}
+            analysisHighlight={analysisHighlight}
           />
-          
+
           <div className="right-panel">
             <SettingsPanel
               playerConfig={playerConfig}
@@ -164,13 +192,25 @@ function App() {
               onGoForward={goForward}
               onGoToPresent={goToPresent}
               onPlayFromHistory={playFromHistory}
-              modelLoaded={modelLoaded}
-              modelLoading={modelLoading}
+              modelLoaded={isAIReady}
+              modelLoading={!isAIReady}
             />
           </div>
         </div>
+
+        <div className="analysis-container">
+          <AnalysisPanel
+            analysis={analysis}
+            isAnalyzing={isAnalyzing}
+            isReady={analysisReady}
+            config={analysisConfigState}
+            onConfigChange={handleAnalysisConfigChange}
+            onMoveHover={handleMoveHover}
+            error={analysisError}
+          />
+        </div>
       </main>
-      
+
       <footer className="app-footer">
         <p>
           <a href="https://boardgamegeek.com/boardgame/355433/boop" target="_blank" rel="noopener noreferrer">

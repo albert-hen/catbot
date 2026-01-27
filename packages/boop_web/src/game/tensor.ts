@@ -447,6 +447,45 @@ export function getGameEnded(state: GameState, player: 1 | -1): number {
 }
 
 /**
+ * Convert a graduation choice to its action number.
+ * Used to look up analysis data for graduation buttons.
+ *
+ * @param choice - The graduation choice (1 or 3 positions)
+ * @returns Action number (72-187)
+ */
+export function graduationChoiceToAction(choice: GraduationChoice): number {
+  if (choice.length === 1) {
+    // Single graduation
+    const [row, col] = choice[0];
+    return 72 + row * 6 + col;
+  }
+
+  // Triple graduation - sort to find center and determine orientation
+  const sorted = [...choice].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const [r0, c0] = sorted[0];
+  const [r1, c1] = sorted[1]; // center
+  const [r2, c2] = sorted[2];
+  const [row, col] = [r1, c1];
+
+  if (r0 === r1 && r1 === r2) {
+    // Horizontal: all same row
+    return 108 + row * 4 + (col - 1);
+  } else if (c0 === c1 && c1 === c2) {
+    // Vertical: all same column
+    return 132 + (row - 1) * 6 + col;
+  } else {
+    // Diagonal - determine direction
+    // Up diagonal (/): col decreases as row increases
+    const isUpDiagonal = sorted[0][1] > sorted[1][1];
+    if (isUpDiagonal) {
+      return 156 + (row - 1) * 4 + (col - 1);
+    } else {
+      return 172 + (row - 1) * 4 + (col - 1);
+    }
+  }
+}
+
+/**
  * Get string representation of tensor for hashing (used in MCTS).
  */
 export function tensorToString(tensor: Float32Array): string {

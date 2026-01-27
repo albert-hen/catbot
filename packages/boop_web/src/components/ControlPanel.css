@@ -17,6 +17,9 @@
   margin: 0;
   font-size: 1.5rem;
   color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .game-status {
@@ -153,17 +156,34 @@
   font-size: 0.9rem;
   text-align: center;
   min-height: 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Analysis overlay bar for graduation buttons */
+.graduation-analysis-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: height 0.2s ease, background 0.2s ease;
 }
 
 .graduation-type {
   font-weight: 600;
   color: #333;
+  position: relative;
+  z-index: 1;
 }
 
 .graduation-coords {
   font-size: 0.8rem;
   color: #666;
   word-break: break-all;
+  position: relative;
+  z-index: 1;
 }
 
 .graduation-button:hover:not(:disabled) {

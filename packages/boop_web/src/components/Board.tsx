@@ -3,19 +3,20 @@
  */
 
 import { useMemo } from 'react';
-import type { 
-  Position, 
+import type {
+  Position,
   GraduationChoice,
   MoveEffects,
   BoopEffect,
 } from '../game';
-import { 
-  GameState, 
+import {
+  GameState,
   BOARD_SIZE,
   ANIMATION_DURATION_MS,
 } from '../game';
 import type { LastMoveHighlights } from '../hooks';
 import type { GamePhase } from '../hooks/useBoopGame';
+import type { PolicyOverlay } from '../game/analysisTypes';
 import './Board.css';
 
 interface BoardProps {
@@ -28,6 +29,10 @@ interface BoardProps {
   animationEnabled?: boolean;
   isAnimating?: boolean;
   gamePhase?: GamePhase;
+  // Analysis overlay
+  policyOverlay?: PolicyOverlay | null;
+  showPolicyOverlay?: boolean;
+  analysisHighlight?: Position | null;
 }
 
 const PIECE_INFO: Record<string, { className: string; label: string }> = {
@@ -47,9 +52,18 @@ export const Board: React.FC<BoardProps> = ({
   animationEnabled = true,
   isAnimating = false,
   gamePhase = 'playing',
+  policyOverlay = null,
+  showPolicyOverlay = false,
+  analysisHighlight = null,
+
 }) => {
   const isHighlighted = (row: number, col: number): boolean => {
     return highlightedCells.some(([r, c]) => r === row && c === col);
+  };
+
+  const isAnalysisHighlighted = (row: number, col: number): boolean => {
+    if (!analysisHighlight) return false;
+    return analysisHighlight[0] === row && analysisHighlight[1] === col;
   };
 
   const isGraduationHighlighted = (row: number, col: number): boolean => {
@@ -117,7 +131,8 @@ export const Board: React.FC<BoardProps> = ({
     const lastPlacement = isLastPlacement(row, col);
     const graduated = isGraduatedCell(row, col);
     const hasBoopAnimation = boopAnimations.has(`${row}-${col}`);
-    
+    const analysisHighlightedCell = isAnalysisHighlighted(row, col);
+
     const classNames = [
       'board-cell',
       piece ? `has-piece piece-cell-${piece}` : 'empty',
@@ -126,6 +141,8 @@ export const Board: React.FC<BoardProps> = ({
       placeable ? 'placeable' : '',
       lastPlacement ? 'last-placement' : '',
       graduated ? 'graduated-cell' : '',
+      analysisHighlightedCell ? 'analysis-highlight' : '',
+
     ].filter(Boolean).join(' ');
     
     const pieceClassNames = [
@@ -143,9 +160,9 @@ export const Board: React.FC<BoardProps> = ({
         role="button"
         tabIndex={0}
         aria-label={
-          piece 
-            ? `${PIECE_INFO[piece].label} at row ${row + 1}, column ${col + 1}` 
-            : `Empty cell at row ${row + 1}, column ${col + 1}`
+          piece
+            ? `${PIECE_INFO[piece].label} at (${row}, ${col})`
+            : `Empty cell at (${row}, ${col})`
         }
       >
         {piece && (
@@ -159,6 +176,66 @@ export const Board: React.FC<BoardProps> = ({
     );
   };
   
+  // Render policy overlay for analysis
+  const renderPolicyOverlay = () => {
+    if (!showPolicyOverlay || !policyOverlay || policyOverlay.maxProbability === 0) {
+      return null;
+    }
+
+    // Cell dimensions (including gap)
+    const cellWidth = 104;
+    const cellHeight = 100;
+    const cellInnerWidth = 102;
+    const cellInnerHeight = 98;
+    const maxBarHeight = cellInnerHeight * 0.8; // Max 80% of cell height
+
+    const entries = Array.from(policyOverlay.cellProbabilities.entries());
+
+    return (
+      <svg className="policy-overlay" aria-hidden="true">
+        {entries.map(([key, prob]) => {
+          const [row, col] = key.split(',').map(Number);
+          const x = col * cellWidth + 1; // +1 for gap offset
+          const cellBottom = row * cellHeight + cellInnerHeight;
+
+          // Normalize probability for visualization
+          const normalizedProb = prob / policyOverlay.maxProbability;
+          const barHeight = normalizedProb * maxBarHeight;
+          const y = cellBottom - barHeight;
+
+          // Color based on probability (green gradient)
+          const hue = 120 * normalizedProb; // 0 = red, 120 = green
+          const opacity = 0.4 + normalizedProb * 0.4;
+
+          return (
+            <g key={key}>
+              <rect
+                x={x}
+                y={y}
+                width={cellInnerWidth}
+                height={barHeight}
+                className="policy-bar"
+                style={{
+                  fill: `hsla(${hue}, 70%, 50%, ${opacity})`,
+                }}
+              />
+              {normalizedProb >= 0.15 && (
+                <text
+                  x={x + cellInnerWidth / 2}
+                  y={y - 4}
+                  className="policy-label"
+                  textAnchor="middle"
+                >
+                  {prob}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  };
+
   // Render arrow trails for boops (visible until next move)
   const renderBoopArrows = () => {
     if (!animationEnabled || !moveEffects?.boops.length) {
@@ -246,6 +323,7 @@ export const Board: React.FC<BoardProps> = ({
           </div>
         ))}
       </div>
+      {renderPolicyOverlay()}
       {renderBoopArrows()}
       {gamePhase === 'setup' && (
         <div className="setup-overlay">

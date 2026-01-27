@@ -3,20 +3,19 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { 
-  Position, 
-  PieceType, 
+import type {
+  Position,
+  PieceType,
   GraduationChoice,
   MoveEffects,
 } from '../game';
-import { 
-  GameState, 
-  MCTS,
-  ONNXNeuralNetwork,
+import {
+  GameState,
   actionToMove,
   MoveType,
   ANIMATION_DURATION_MS,
 } from '../game';
+import { AIService } from '../services/AIService';
 
 export interface PlayerConfig {
   orange: 'human' | 'ai';
@@ -38,6 +37,7 @@ export interface UseBoopGameOptions {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
   animationConfig: AnimationConfig;
+  modelUrl?: string; // URL for AI model (default: '/model.onnx')
   onAIThinking?: (thinking: boolean) => void;
 }
 
@@ -54,13 +54,14 @@ export interface UseBoopGameResult {
   selectedPieceType: PieceType | null;
   hoveredGraduation: GraduationChoice | null;
   isAIThinking: boolean;
+  isAIReady: boolean;
   isAnimating: boolean;
   lastMoveHighlights: LastMoveHighlights;
   moveEffects: MoveEffects | null;
-  
+
   // Game phase
   gamePhase: GamePhase;
-  
+
   // Pause/replay state
   isPaused: boolean;
   isViewingHistory: boolean;
@@ -68,7 +69,7 @@ export interface UseBoopGameResult {
   historyLength: number;
   canGoBack: boolean;
   canGoForward: boolean;
-  
+
   // Actions
   selectPieceType: (pieceType: PieceType) => void;
   placePiece: (position: Position) => void;
@@ -84,7 +85,6 @@ export interface UseBoopGameResult {
 }
 
 export function useBoopGame(
-  nnet: ONNXNeuralNetwork | null,
   options: UseBoopGameOptions
 ): UseBoopGameResult {
   const [gameState, setGameState] = useState(() => new GameState());
@@ -98,36 +98,43 @@ export function useBoopGame(
     placedAt: null,
     graduatedPositions: [],
   });
-  
+
   // Game phase: setup -> playing -> game_over
   const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
-  
+
   // Pause/replay state for AI vs AI
   const [isPaused, setIsPaused] = useState(false);
   const [viewingHistoryIndex, setViewingHistoryIndex] = useState<number | null>(null);
-  
-  const mctsRef = useRef<MCTS | null>(null);
+
+  // AI service state
+  const [isAIReady, setIsAIReady] = useState(false);
+  const aiServiceRef = useRef<AIService | null>(null);
   const processingRef = useRef(false);
-  
-  // Initialize MCTS when nnet is available
+
+  // Initialize AI service on mount
   useEffect(() => {
-    if (nnet && !mctsRef.current) {
-      mctsRef.current = new MCTS(nnet, {
-        numSimulations: options.aiConfig.numSimulations,
-        cpuct: 1.0,
-      });
-    }
-  }, [nnet, options.aiConfig.numSimulations]);
-  
-  // Update MCTS simulation count when config changes
-  useEffect(() => {
-    if (mctsRef.current) {
-      mctsRef.current = new MCTS(nnet!, {
-        numSimulations: options.aiConfig.numSimulations,
-        cpuct: 1.0,
-      });
-    }
-  }, [nnet, options.aiConfig.numSimulations]);
+    const initAI = async () => {
+      try {
+        const service = new AIService();
+        await service.initialize(options.modelUrl ?? '/model.onnx');
+        aiServiceRef.current = service;
+        setIsAIReady(true);
+        console.log('[useBoopGame] AI service initialized');
+      } catch (error) {
+        console.error('[useBoopGame] Failed to initialize AI service:', error);
+      }
+    };
+
+    initAI();
+
+    return () => {
+      if (aiServiceRef.current) {
+        aiServiceRef.current.terminate();
+        aiServiceRef.current = null;
+      }
+      setIsAIReady(false);
+    };
+  }, [options.modelUrl]);
   
   // Detect game over and transition to game_over phase
   useEffect(() => {
@@ -141,32 +148,36 @@ export function useBoopGame(
     if (processingRef.current) return;
     if (gameState.gameOver) return;
     if (gamePhase !== 'playing') return; // Only move during playing phase
-    if (!mctsRef.current || !nnet) return;
+    if (!aiServiceRef.current || !isAIReady) return;
     if (isAnimating) return; // Wait for animation to complete
     if (isPaused) return; // Don't move while paused
     if (viewingHistoryIndex !== null) return; // Don't move while viewing history
-    
+
     const currentPlayer = gameState.currentTurn;
     const isAI = options.playerConfig[currentPlayer] === 'ai';
-    
+
     if (!isAI) return;
-    
+
     processingRef.current = true;
     setIsAIThinking(true);
     options.onAIThinking?.(true);
-    
+
     try {
       // Apply configured delay before AI move
       const delay = Math.max(100, options.aiConfig.moveDelayMs || 100);
       await new Promise(resolve => setTimeout(resolve, delay));
-      
+
       // Check if we got paused during the delay
       if (isPaused) {
         return;
       }
-      
+
       const player: 1 | -1 = currentPlayer === 'orange' ? 1 : -1;
-      const action = await mctsRef.current.selectAction(gameState, player);
+      const action = await aiServiceRef.current.selectAction(
+        gameState,
+        player,
+        options.aiConfig.numSimulations
+      );
       
       const { position, moveType } = actionToMove(action);
       
@@ -244,12 +255,12 @@ export function useBoopGame(
       setIsAIThinking(false);
       options.onAIThinking?.(false);
     }
-  }, [gameState, nnet, options, isAnimating, isPaused, viewingHistoryIndex, gamePhase]);
+  }, [gameState, isAIReady, options, isAnimating, isPaused, viewingHistoryIndex, gamePhase]);
   
   // Trigger AI move when it's AI's turn (also after animation completes or unpause)
   useEffect(() => {
     checkAndMakeAIMove();
-  }, [gameState.currentTurn, gameState.stateMode, isAnimating, isPaused, viewingHistoryIndex, gamePhase, checkAndMakeAIMove]);
+  }, [gameState.currentTurn, gameState.stateMode, isAnimating, isPaused, viewingHistoryIndex, gamePhase, isAIReady, checkAndMakeAIMove]);
   
   // Toggle pause (works for all player configs during playing phase)
   const togglePause = useCallback(() => {
@@ -454,9 +465,7 @@ export function useBoopGame(
     setViewingHistoryIndex(null);
     setGamePhase('setup'); // Go back to setup phase
     processingRef.current = false;
-    if (mctsRef.current) {
-      mctsRef.current.reset();
-    }
+    // AI worker resets its own MCTS state on each move, so no explicit reset needed
   }, []);
   
   // Derived state
@@ -475,6 +484,7 @@ export function useBoopGame(
     selectedPieceType,
     hoveredGraduation,
     isAIThinking,
+    isAIReady,
     isAnimating,
     lastMoveHighlights: isViewingHistory ? { placedAt: null, graduatedPositions: [] } : lastMoveHighlights,
     moveEffects: isViewingHistory ? null : moveEffects,

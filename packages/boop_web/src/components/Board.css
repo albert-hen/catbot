@@ -232,6 +232,45 @@
   background: rgba(211, 211, 211, 0.6);
 }
 
+/* Policy overlay for analysis */
+.policy-overlay {
+  position: absolute;
+  top: 23px;
+  left: 32px;
+  width: 616px;
+  height: 600px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.policy-circle {
+  transition: all 0.3s ease;
+}
+
+.policy-label {
+  fill: white;
+  font-size: 11px;
+  font-weight: bold;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+/* Analysis highlight for hovered move from analysis panel */
+.board-cell.analysis-highlight {
+  border-color: #00BCD4;
+  box-shadow: 0 0 20px rgba(0, 188, 212, 0.8);
+  animation: pulse-analysis 1s infinite;
+}
+
+@keyframes pulse-analysis {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(0, 188, 212, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(0, 188, 212, 0.9);
+  }
+}
+
 /* Responsive sizing */
 @media (max-width: 600px) {
   .board-cell {

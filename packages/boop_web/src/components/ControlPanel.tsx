@@ -2,13 +2,15 @@
  * Boop Game - Control Panel Component
  */
 
-import type { 
-  PieceType, 
+import type {
+  PieceType,
   GraduationChoice,
 } from '../game';
-import { 
-  GameState, 
+import {
+  GameState,
+  graduationChoiceToAction,
 } from '../game';
+import type { AnalysisResult } from '../game/analysisTypes';
 import './ControlPanel.css';
 
 interface ControlPanelProps {
@@ -18,6 +20,7 @@ interface ControlPanelProps {
   onSelectGraduation: (choice: GraduationChoice) => void;
   onHoverGraduation: (choice: GraduationChoice | null) => void;
   isAIThinking: boolean;
+  analysis?: AnalysisResult | null;
 }
 
 const PIECE_INFO: Record<PieceType, { spriteClass: string; label: string }> = {
@@ -34,24 +37,38 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onSelectGraduation,
   onHoverGraduation,
   isAIThinking,
+  analysis,
 }) => {
   const isOrangeTurn = gameState.currentTurn === 'orange';
   const isGraduation = gameState.stateMode === 'waiting_for_graduation_choice';
+
+  // Helper to get visit count for a graduation choice from analysis
+  const getGraduationVisits = (choice: GraduationChoice): number => {
+    if (!analysis) return 0;
+    const action = graduationChoiceToAction(choice);
+    const move = analysis.topMoves.find(m => m.action === action);
+    return move?.visitCount ?? 0;
+  };
+
+  // Calculate max visits for normalization
+  const maxGraduationVisits = isGraduation && analysis
+    ? Math.max(...gameState.graduationChoices.map(getGraduationVisits), 1)
+    : 1;
 
   const formatGraduationChoice = (choice: GraduationChoice): { type: string; coordinates: string } => {
     if (choice.length === 1) {
       const [row, col] = choice[0];
       return {
         type: 'Single',
-        coordinates: `(${row + 1},${col + 1})`
+        coordinates: `(${row},${col})`
       };
     }
-    
+
     // Determine orientation and format coordinates
     const [r0, c0] = choice[0];
     const [r1, c1] = choice[1];
     const [r2, c2] = choice[2];
-    const coords = `(${r0 + 1},${c0 + 1})->(${r1 + 1},${c1 + 1})->(${r2 + 1},${c2 + 1})`;
+    const coords = `(${r0},${c0})->(${r1},${c1})->(${r2},${c2})`;
     
     if (r0 === r1) {
       return { type: 'Horizontal', coordinates: coords };
@@ -151,6 +168,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="graduation-buttons">
             {gameState.graduationChoices.map((choice, index) => {
               const formatted = formatGraduationChoice(choice);
+              const visits = getGraduationVisits(choice);
+              const normalizedProb = maxGraduationVisits > 0
+                ? visits / maxGraduationVisits
+                : 0;
+              const barHeight = normalizedProb * 100;
+              // Color scheme matching board overlay: red (0) to green (120)
+              const hue = 120 * normalizedProb;
+              const opacity = 0.4 + normalizedProb * 0.4;
               return (
                 <button
                   key={index}
@@ -160,6 +185,15 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                   onMouseLeave={() => onHoverGraduation(null)}
                   disabled={isAIThinking}
                 >
+                  {analysis && visits > 0 && (
+                    <div
+                      className="graduation-analysis-bar"
+                      style={{
+                        height: `${barHeight}%`,
+                        background: `hsla(${hue}, 70%, 50%, ${opacity})`,
+                      }}
+                    />
+                  )}
                   <span className="graduation-type">{formatted.type}</span>
                   <span className="graduation-coords">{formatted.coordinates}</span>
                 </button>

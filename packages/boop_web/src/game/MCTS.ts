@@ -13,6 +13,7 @@ import {
   tensorToString,
   ACTION_SIZE,
 } from './tensor';
+import type { MCTSStateStats, ActionStats } from './analysisTypes';
 
 const EPS = 1e-8;
 
@@ -148,26 +149,97 @@ export class MCTS {
 
   /**
    * Select best action for the given state.
-   * 
+   *
    * @param state - Current game state
    * @param player - Current player (1 = orange, -1 = gray)
    * @returns Best action index
    */
   async selectAction(state: GameState, player: 1 | -1): Promise<number> {
     const probs = await this.getActionProb(state, player, 0);
-    
+
     // Find action with highest probability
     let bestAction = 0;
     let bestProb = probs[0];
-    
+
     for (let a = 1; a < ACTION_SIZE; a++) {
       if (probs[a] > bestProb) {
         bestProb = probs[a];
         bestAction = a;
       }
     }
-    
+
     return bestAction;
+  }
+
+  /**
+   * Get current statistics for a state (for analysis display).
+   *
+   * @param state - Game state to analyze
+   * @param player - Current player (1 = orange, -1 = gray)
+   * @returns Statistics for the state, or null if not yet evaluated
+   */
+  getStateStatistics(state: GameState, player: 1 | -1): MCTSStateStats | null {
+    const tensor = gameStateToTensor(state);
+    const canonicalBoard = getCanonicalForm(tensor, player);
+    const s = tensorToString(canonicalBoard);
+
+    if (!this.Ps.has(s)) return null;
+
+    const ps = this.Ps.get(s)!;
+    const ns = this.Ns.get(s) ?? 0;
+    const valids = this.Vs.get(s)!;
+
+    const actions: ActionStats[] = [];
+
+    for (let a = 0; a < ACTION_SIZE; a++) {
+      if (valids[a] > 0) {
+        const key = `${s},${a}`;
+        const nsa = this.Nsa.get(key) ?? 0;
+        const qsa = this.Qsa.get(key) ?? 0;
+
+        actions.push({
+          action: a,
+          visits: nsa,
+          qValue: qsa,
+          prior: ps[a],
+        });
+      }
+    }
+
+    // Sort by visit count descending
+    actions.sort((a, b) => b.visits - a.visits);
+
+    // Get value estimate (average Q across visited actions, or 0)
+    let rawValue = 0;
+    let totalVisits = 0;
+    for (const action of actions) {
+      if (action.visits > 0) {
+        rawValue += action.qValue * action.visits;
+        totalVisits += action.visits;
+      }
+    }
+    if (totalVisits > 0) {
+      rawValue /= totalVisits;
+    }
+
+    return {
+      totalVisits: ns,
+      actions,
+      rawPolicy: ps,
+      rawValue,
+    };
+  }
+
+  /**
+   * Run a single MCTS simulation (for incremental analysis).
+   *
+   * @param state - Game state to analyze
+   * @param player - Current player (1 = orange, -1 = gray)
+   */
+  async runSingleSimulation(state: GameState, player: 1 | -1): Promise<void> {
+    const tensor = gameStateToTensor(state);
+    const canonicalBoard = getCanonicalForm(tensor, player);
+    await this.search(canonicalBoard, new Set());
   }
 
   /**
