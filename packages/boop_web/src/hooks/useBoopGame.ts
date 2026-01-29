@@ -37,7 +37,7 @@ export interface UseBoopGameOptions {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
   animationConfig: AnimationConfig;
-  modelUrl?: string; // URL for AI model (default: '/model.onnx')
+  modelUrl?: string; // URL for AI model (default: runtime base URL + 'model.onnx')
   onAIThinking?: (thinking: boolean) => void;
 }
 
@@ -116,7 +116,7 @@ export function useBoopGame(
     const initAI = async () => {
       try {
         const service = new AIService();
-        await service.initialize(options.modelUrl ?? '/model.onnx');
+        await service.initialize(options.modelUrl ?? `${import.meta.env.BASE_URL}model.onnx`);
         aiServiceRef.current = service;
         setIsAIReady(true);
         console.log('[useBoopGame] AI service initialized');

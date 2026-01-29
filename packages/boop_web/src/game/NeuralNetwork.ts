@@ -18,8 +18,8 @@ export class ONNXNeuralNetwork implements NeuralNetwork {
   private modelPath: string;
   private loadPromise: Promise<void> | null = null;
 
-  constructor(modelPath: string = '/model.onnx') {
-    this.modelPath = modelPath;
+  constructor(modelPath?: string) {
+    this.modelPath = modelPath ?? `${import.meta.env.BASE_URL}model.onnx`;
   }
 
   /**

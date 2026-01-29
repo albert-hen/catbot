@@ -50,7 +50,8 @@ export class AnalysisService {
   /**
    * Initialize the worker and load the model
    */
-  async initialize(modelUrl: string = '/model.onnx'): Promise<void> {
+  async initialize(modelUrl?: string): Promise<void> {
+    modelUrl = modelUrl ?? `${import.meta.env.BASE_URL}model.onnx`;
     if (this.status === 'ready' || this.status === 'initializing') {
       return;
     }

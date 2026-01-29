@@ -78,6 +78,7 @@ function App() {
     playerConfig,
     aiConfig,
     animationConfig,
+    modelUrl: `${import.meta.env.BASE_URL}model.onnx`,
   });
 
   // Determine current player for analysis
@@ -93,7 +94,7 @@ function App() {
     updateConfig: updateAnalysisConfig,
   } = useAnalysis(gameState, currentPlayer, {
     enabled: analysisConfig.enabled && !gameState.gameOver && gamePhase !== 'setup',
-    modelUrl: '/model.onnx',
+    modelUrl: `${import.meta.env.BASE_URL}model.onnx`,
     config: analysisConfig,
   });
   
