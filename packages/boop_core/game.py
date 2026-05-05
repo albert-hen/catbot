@@ -61,17 +61,11 @@ class GameState:
         state += "Board:\n"
         for row in self.board:
             for cell in row:
-                if cell == "ok":
-                    state += "ok "
-                elif cell == "gk":
-                    state += "gk "
-                elif cell == "oc":
-                    state += "oc "
-                elif cell == "gc":
-                    state += "gc "
+                if cell in ["ok", "gk", "oc", "gc"]:    # maybe this list can be a global used elsewhere
+                    state += cell 
                 else:
-                    state += "-- "
-            state += "\n"
+                    state += "--"
+            state += " \n"
 
         # Add the current turn
         state += f"Current Turn: {self.current_turn}\n"
