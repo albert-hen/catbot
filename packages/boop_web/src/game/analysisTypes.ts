@@ -125,32 +125,6 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
 };
 
 /**
- * Messages sent to the analysis worker
- */
-export type AnalysisWorkerMessage =
-  | { type: 'init'; modelUrl: string }
-  | { type: 'analyze'; position: Float32Array; player: 1 | -1; config: AnalysisConfig }
-  | { type: 'stop' };
-
-/**
- * Messages sent from the analysis worker
- */
-export type AnalysisWorkerResponse =
-  | { type: 'ready' }
-  | { type: 'update'; result: AnalysisResult }
-  | { type: 'error'; message: string };
-
-/**
- * Statistics from MCTS for a single state (returned by getStateStatistics)
- */
-export interface MCTSStateStats {
-  totalVisits: number;
-  actions: ActionStats[];
-  rawPolicy: Float32Array;
-  rawValue: number;
-}
-
-/**
  * Statistics for a single action
  */
 export interface ActionStats {
@@ -161,35 +135,19 @@ export interface ActionStats {
 }
 
 /**
- * Messages sent to the AI worker
- */
-export type AIWorkerMessage =
-  | { type: 'init'; modelUrl: string }
-  | { type: 'selectAction'; position: Float32Array; player: 1 | -1; numSimulations: number };
-
-/**
- * Messages sent from the AI worker
- */
-export type AIWorkerResponse =
-  | { type: 'ready' }
-  | { type: 'action'; action: number }
-  | { type: 'error'; message: string };
-
-/**
- * Messages sent to the unified AlphaZero worker
+ * Messages sent to the AlphaZero worker
  */
 export type AlphaZeroWorkerMessage =
   | { type: 'init'; modelUrl: string }
   | { type: 'setPosition'; position: Float32Array; player: 1 | -1 }
   | { type: 'requestMove'; numSimulations: number }
-  | { type: 'setAnalysisEnabled'; enabled: boolean; config?: AnalysisConfig }
-  | { type: 'stop' };
+  | { type: 'getSnapshot' };
 
 /**
- * Messages sent from the unified AlphaZero worker
+ * Messages sent from the AlphaZero worker
  */
 export type AlphaZeroWorkerResponse =
   | { type: 'ready' }
-  | { type: 'analysisUpdate'; result: AnalysisResult }
+  | { type: 'snapshot'; result: AnalysisResult }
   | { type: 'moveResult'; action: number }
   | { type: 'error'; message: string };

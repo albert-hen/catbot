@@ -2,7 +2,7 @@
  * Boop Game - React Hook for game state management
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   Position,
   PieceType,
@@ -11,11 +11,11 @@ import type {
 } from '../game';
 import {
   GameState,
-  actionToMove,
-  MoveType,
   ANIMATION_DURATION_MS,
 } from '../game';
-import { AlphaZeroService } from '../services/AlphaZeroService';
+import { useAlphaZeroReady } from '../contexts/AlphaZeroContext';
+import { useAIPlayer } from './useAIPlayer';
+import type { AIPlayerMoveResult } from './useAIPlayer';
 
 export interface PlayerConfig {
   orange: 'human' | 'ai';
@@ -24,7 +24,7 @@ export interface PlayerConfig {
 
 export interface AIConfig {
   numSimulations: number;
-  moveDelayMs: number; // Delay before AI makes a move (0 = no delay)
+  moveDelayMs: number;
 }
 
 export interface AnimationConfig {
@@ -37,13 +37,9 @@ export interface UseBoopGameOptions {
   playerConfig: PlayerConfig;
   aiConfig: AIConfig;
   animationConfig: AnimationConfig;
-  modelUrl?: string; // URL for AI model (default: runtime base URL + 'model.onnx')
   onAIThinking?: (thinking: boolean) => void;
 }
 
-/**
- * Highlights to show on the board for the last move
- */
 export interface LastMoveHighlights {
   placedAt: Position | null;
   graduatedPositions: Position[];
@@ -58,22 +54,13 @@ export interface UseBoopGameResult {
   isAnimating: boolean;
   lastMoveHighlights: LastMoveHighlights;
   moveEffects: MoveEffects | null;
-
-  // Game phase
   gamePhase: GamePhase;
-
-  // Pause/replay state
   isPaused: boolean;
   isViewingHistory: boolean;
   historyIndex: number;
   historyLength: number;
   canGoBack: boolean;
   canGoForward: boolean;
-
-  // Shared AlphaZero service (for use by useAnalysis)
-  alphaZeroService: AlphaZeroService | null;
-
-  // Actions
   selectPieceType: (pieceType: PieceType) => void;
   placePiece: (position: Position) => void;
   selectGraduation: (choice: GraduationChoice) => void;
@@ -93,7 +80,6 @@ export function useBoopGame(
   const [gameState, setGameState] = useState(() => new GameState());
   const [selectedPieceType, setSelectedPieceType] = useState<PieceType | null>(null);
   const [hoveredGraduation, setHoveredGraduation] = useState<GraduationChoice | null>(null);
-  const [isAIThinking, setIsAIThinking] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [gameHistory, setGameHistory] = useState<GameState[]>([]);
   const [moveEffects, setMoveEffects] = useState<MoveEffects | null>(null);
@@ -101,277 +87,129 @@ export function useBoopGame(
     placedAt: null,
     graduatedPositions: [],
   });
-
-  // Game phase: setup -> playing -> game_over
   const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
-
-  // Pause/replay state for AI vs AI
   const [isPaused, setIsPaused] = useState(false);
   const [viewingHistoryIndex, setViewingHistoryIndex] = useState<number | null>(null);
 
-  // AlphaZero service state
-  const [isAIReady, setIsAIReady] = useState(false);
-  const serviceRef = useRef<AlphaZeroService | null>(null);
-  const processingRef = useRef(false);
-  const generationRef = useRef(0);
+  const isAIReady = useAlphaZeroReady();
 
-  // Initialize AlphaZero service on mount
-  useEffect(() => {
-    const initAI = async () => {
-      try {
-        const service = new AlphaZeroService();
-        await service.initialize(options.modelUrl ?? `${import.meta.env.BASE_URL}model.onnx`);
-        serviceRef.current = service;
-        setIsAIReady(true);
-        console.log('[useBoopGame] AlphaZero service initialized');
-      } catch (error) {
-        console.error('[useBoopGame] Failed to initialize AlphaZero service:', error);
-      }
-    };
+  // Apply AI move results (called by useAIPlayer)
+  const handleAIMove = useCallback((result: AIPlayerMoveResult) => {
+    const { previousState, newState, effects } = result;
 
-    initAI();
+    setGameHistory(prev => [...prev, previousState.clone()]);
 
-    return () => {
-      if (serviceRef.current) {
-        serviceRef.current.terminate();
-        serviceRef.current = null;
-      }
-      setIsAIReady(false);
-    };
-  }, [options.modelUrl]);
-  
-  // Detect game over and transition to game_over phase
+    setMoveEffects(effects);
+    setLastMoveHighlights({
+      placedAt: effects?.placedAt ?? null,
+      graduatedPositions: effects?.graduatedPositions ?? [],
+    });
+
+    if (options.animationConfig.enabled && effects && effects.boops.length > 0) {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setIsAnimating(false);
+      }, ANIMATION_DURATION_MS);
+    }
+
+    setGameState(newState);
+  }, [options.animationConfig.enabled]);
+
+  // AI player orchestration
+  const { isAIThinking, resetGeneration } = useAIPlayer(
+    gameState,
+    gamePhase,
+    isPaused,
+    isAnimating,
+    viewingHistoryIndex,
+    handleAIMove,
+    {
+      playerConfig: options.playerConfig,
+      aiConfig: options.aiConfig,
+      animationConfig: options.animationConfig,
+      onAIThinking: options.onAIThinking,
+    },
+  );
+
+  // Detect game over
   useEffect(() => {
     if (gamePhase === 'playing' && gameState.gameOver) {
       setGamePhase('game_over');
     }
   }, [gameState.gameOver, gamePhase]);
-  
-  // Check if current player is AI and trigger move
-  const checkAndMakeAIMove = useCallback(async () => {
-    if (processingRef.current) return;
-    if (gameState.gameOver) return;
-    if (gamePhase !== 'playing') return; // Only move during playing phase
-    if (!serviceRef.current || !isAIReady) return;
-    if (isAnimating) return; // Wait for animation to complete
-    if (isPaused) return; // Don't move while paused
-    if (viewingHistoryIndex !== null) return; // Don't move while viewing history
 
-    const currentPlayer = gameState.currentTurn;
-    const isAI = options.playerConfig[currentPlayer] === 'ai';
-
-    if (!isAI) return;
-
-    processingRef.current = true;
-    setIsAIThinking(true);
-    options.onAIThinking?.(true);
-    const gen = generationRef.current;
-
-    try {
-      // Apply configured delay before AI move
-      const delay = Math.max(100, options.aiConfig.moveDelayMs || 100);
-      await new Promise(resolve => setTimeout(resolve, delay));
-
-      // Check if game was reset or paused during the delay
-      if (gen !== generationRef.current || isPaused) {
-        return;
-      }
-
-      const player: 1 | -1 = currentPlayer === 'orange' ? 1 : -1;
-      const action = await serviceRef.current.selectAction(
-        gameState,
-        player,
-        options.aiConfig.numSimulations
-      );
-
-      // Game was reset while waiting for the move — discard it
-      if (gen !== generationRef.current) return;
-
-      const { position, moveType } = actionToMove(action);
-      
-      // Save state to history before AI move
-      setGameHistory(prev => [...prev, gameState.clone()]);
-      
-      // Apply the move and capture effects
-      const newState = gameState.clone();
-      let effects: MoveEffects | null = null;
-      
-      if (moveType === MoveType.PLACE_KITTEN || moveType === MoveType.PLACE_CAT) {
-        let piece: PieceType;
-        if (moveType === MoveType.PLACE_KITTEN) {
-          piece = currentPlayer === 'orange' ? 'ok' : 'gk';
-        } else {
-          piece = currentPlayer === 'orange' ? 'oc' : 'gc';
-        }
-        effects = newState.placePiece(piece, position);
-      } else {
-        // Graduation move
-        const [row, col] = position;
-        let choice: GraduationChoice;
-        
-        switch (moveType) {
-          case MoveType.SINGLE_GRADUATION:
-            choice = [[row, col]];
-            break;
-          case MoveType.HORIZONTAL_TRIPLE_GRADUATION:
-            choice = [[row, col - 1], [row, col], [row, col + 1]];
-            break;
-          case MoveType.VERTICAL_TRIPLE_GRADUATION:
-            choice = [[row - 1, col], [row, col], [row + 1, col]];
-            break;
-          case MoveType.DIAGONAL_TRIPLE_GRADUATION_UP:
-            choice = [[row - 1, col + 1], [row, col], [row + 1, col - 1]];
-            break;
-          case MoveType.DIAGONAL_TRIPLE_GRADUATION_DOWN:
-            choice = [[row - 1, col - 1], [row, col], [row + 1, col + 1]];
-            break;
-          default:
-            throw new Error(`Unknown move type: ${moveType}`);
-        }
-        
-        const graduatedPositions = newState.chooseGraduation(choice);
-        // For graduation moves, we don't have placement info
-        effects = {
-          placedAt: position, // Not really placement, but marks the graduation center
-          placedPiece: currentPlayer === 'orange' ? 'oc' : 'gc',
-          boops: [],
-          graduatedPositions,
-        };
-      }
-      
-      // Update effects and highlights
-      setMoveEffects(effects);
-      setLastMoveHighlights({
-        placedAt: effects?.placedAt ?? null,
-        graduatedPositions: effects?.graduatedPositions ?? [],
-      });
-      
-      // Handle animation if enabled - set state before gameState so animation renders
-      if (options.animationConfig.enabled && effects && effects.boops.length > 0) {
-        setIsAnimating(true);
-        // Clear animation state after duration (but keep moveEffects for arrows)
-        setTimeout(() => {
-          setIsAnimating(false);
-        }, ANIMATION_DURATION_MS);
-      }
-      
-      setGameState(newState);
-    } catch (error) {
-      console.error('AI move failed:', error);
-    } finally {
-      processingRef.current = false;
-      setIsAIThinking(false);
-      options.onAIThinking?.(false);
-    }
-  }, [gameState, isAIReady, options, isAnimating, isPaused, viewingHistoryIndex, gamePhase]);
-  
-  // Trigger AI move when it's AI's turn (also after animation completes or unpause)
-  useEffect(() => {
-    checkAndMakeAIMove();
-  }, [gameState.currentTurn, gameState.stateMode, isAnimating, isPaused, viewingHistoryIndex, gamePhase, isAIReady, checkAndMakeAIMove]);
-  
-  // Toggle pause (works for all player configs during playing phase)
+  // Toggle pause
   const togglePause = useCallback(() => {
     if (gamePhase !== 'playing') return;
     setIsPaused(prev => !prev);
-    // When unpausing, return to present if viewing history
     if (isPaused && viewingHistoryIndex !== null) {
       setViewingHistoryIndex(null);
     }
   }, [isPaused, viewingHistoryIndex, gamePhase]);
-  
-  // Go back in history (while paused or game over)
+
+  // History navigation
   const goBack = useCallback(() => {
     if (!isPaused && gamePhase !== 'game_over') return;
-    
     if (viewingHistoryIndex === null) {
-      // Currently at present, go to last history entry
       if (gameHistory.length > 0) {
         setViewingHistoryIndex(gameHistory.length - 1);
       }
     } else if (viewingHistoryIndex > 0) {
-      // Go further back
       setViewingHistoryIndex(viewingHistoryIndex - 1);
     }
   }, [isPaused, viewingHistoryIndex, gameHistory.length, gamePhase]);
-  
-  // Go forward in history (while paused or game over)
+
   const goForward = useCallback(() => {
     if ((!isPaused && gamePhase !== 'game_over') || viewingHistoryIndex === null) return;
     if (viewingHistoryIndex >= gameHistory.length - 1) {
-      // Go to present (current game state)
       setViewingHistoryIndex(null);
     } else {
       setViewingHistoryIndex(viewingHistoryIndex + 1);
     }
   }, [isPaused, viewingHistoryIndex, gameHistory.length, gamePhase]);
-  
-  // Go to present (exit history viewing)
+
   const goToPresent = useCallback(() => {
     setViewingHistoryIndex(null);
   }, []);
-  
-  // Play from the currently viewed historical state
+
   const playFromHistory = useCallback(() => {
-    if (viewingHistoryIndex === null) return; // Already at present
-    
-    // Get the historical state we're viewing
+    if (viewingHistoryIndex === null) return;
     const historicalState = gameHistory[viewingHistoryIndex];
-    
-    // Make it the new present
     setGameState(historicalState.clone());
-    
-    // Truncate history to before this point
     setGameHistory(gameHistory.slice(0, viewingHistoryIndex));
-    
-    // Clear UI state
     setSelectedPieceType(null);
     setHoveredGraduation(null);
     setMoveEffects(null);
     setLastMoveHighlights({ placedAt: null, graduatedPositions: [] });
-    
-    // Resume play
     setViewingHistoryIndex(null);
     setIsPaused(false);
-    setGamePhase('playing'); // In case we were in game_over
+    setGamePhase('playing');
   }, [viewingHistoryIndex, gameHistory]);
-  
-  // Keyboard handler for history navigation
+
+  // Keyboard handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      
-      // Pause toggle (p) - only during playing phase
       if (key === 'p' && gamePhase === 'playing') {
         e.preventDefault();
         togglePause();
-        return;
-      }
-      
-      // Back (u) - when paused or game over
-      if (key === 'u' && (isPaused || gamePhase === 'game_over')) {
+      } else if (key === 'u' && (isPaused || gamePhase === 'game_over')) {
         e.preventDefault();
         goBack();
-        return;
-      }
-      
-      // Forward (i) - when paused or game over
-      if (key === 'i' && (isPaused || gamePhase === 'game_over')) {
+      } else if (key === 'i' && (isPaused || gamePhase === 'game_over')) {
         e.preventDefault();
         goForward();
-        return;
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePause, goBack, goForward, isPaused, gamePhase]);
-  
+
   // Save state to history before each move
   const pushToHistory = useCallback(() => {
     setGameHistory(prev => [...prev, gameState.clone()]);
-  }, [gameState]);;
-  
+  }, [gameState]);
+
   // Set default piece type when turn changes
   useEffect(() => {
     if (gameState.stateMode === 'waiting_for_placement') {
@@ -385,81 +223,72 @@ export function useBoopGame(
       }
     }
   }, [gameState.currentTurn, gameState.stateMode, gameState.placeablePieces]);
-  
+
   const selectPieceType = useCallback((pieceType: PieceType) => {
     if (gameState.placeablePieces.includes(pieceType)) {
       setSelectedPieceType(pieceType);
     }
   }, [gameState.placeablePieces]);
-  
+
   const placePiece = useCallback((position: Position) => {
     if (gameState.stateMode !== 'waiting_for_placement') return;
     if (!selectedPieceType) return;
     if (isAIThinking || isAnimating || isPaused) return;
-    
-    // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
-    
+
     try {
       pushToHistory();
       const newState = gameState.clone();
       const effects = newState.placePiece(selectedPieceType, position);
-      
-      // Update effects and highlights
+
       setMoveEffects(effects);
       setLastMoveHighlights({
         placedAt: effects.placedAt,
         graduatedPositions: effects.graduatedPositions ?? [],
       });
-      
-      // Handle animation if enabled - set state before gameState so animation renders
+
       if (options.animationConfig.enabled && effects.boops.length > 0) {
         setIsAnimating(true);
-        // Clear animation state after duration (but keep moveEffects for arrows)
         setTimeout(() => {
           setIsAnimating(false);
         }, ANIMATION_DURATION_MS);
       }
-      
+
       setGameState(newState);
     } catch (error) {
       console.error('Invalid move:', error);
     }
   }, [gameState, selectedPieceType, isAIThinking, isAnimating, isPaused, options, pushToHistory]);
-  
+
   const selectGraduation = useCallback((choice: GraduationChoice) => {
     if (gameState.stateMode !== 'waiting_for_graduation_choice') return;
     if (isAIThinking || isAnimating || isPaused) return;
-    
-    // Check if current player is human
     if (options.playerConfig[gameState.currentTurn] !== 'human') return;
-    
+
     try {
       pushToHistory();
       const newState = gameState.clone();
       const graduatedPositions = newState.chooseGraduation(choice);
-      
-      // Update highlights to show graduation
+
       setLastMoveHighlights(prev => ({
         ...prev,
         graduatedPositions,
       }));
-      setMoveEffects(null); // Clear move effects since this is just graduation
-      
+      setMoveEffects(null);
+
       setGameState(newState);
       setHoveredGraduation(null);
     } catch (error) {
       console.error('Invalid graduation choice:', error);
     }
   }, [gameState, isAIThinking, isAnimating, isPaused, options, pushToHistory]);
-  
-  // Start the game (transition from setup to playing)
+
   const startGame = useCallback(() => {
     if (gamePhase === 'setup') {
       setGamePhase('playing');
     }
   }, [gamePhase]);
-  
+
   const resetGame = useCallback(() => {
     setGameState(new GameState());
     setGameHistory([]);
@@ -467,33 +296,22 @@ export function useBoopGame(
     setHoveredGraduation(null);
     setMoveEffects(null);
     setLastMoveHighlights({ placedAt: null, graduatedPositions: [] });
-    setIsAIThinking(false);
     setIsAnimating(false);
     setIsPaused(false);
     setViewingHistoryIndex(null);
-    setGamePhase('setup'); // Go back to setup phase
-    processingRef.current = false;
-    generationRef.current++;
-    // AI worker resets its own MCTS state on each move, so no explicit reset needed
-  }, []);
-  
+    setGamePhase('setup');
+    resetGeneration();
+  }, [resetGeneration]);
+
   // Derived state
   const isViewingHistory = viewingHistoryIndex !== null;
   const historyIndex = viewingHistoryIndex ?? gameHistory.length;
   const canGoBack = (isPaused || gamePhase === 'game_over') && (viewingHistoryIndex === null ? gameHistory.length > 0 : viewingHistoryIndex > 0);
   const canGoForward = (isPaused || gamePhase === 'game_over') && viewingHistoryIndex !== null;
-  
-  // The state to display (either current or historical)
-  const displayState = viewingHistoryIndex !== null 
-    ? gameHistory[viewingHistoryIndex] 
+
+  const displayState = viewingHistoryIndex !== null
+    ? gameHistory[viewingHistoryIndex]
     : gameState;
-  
-  // Keep the worker's position in sync with the game state
-  useEffect(() => {
-    if (!serviceRef.current || !isAIReady) return;
-    const player: 1 | -1 = gameState.currentTurn === 'orange' ? 1 : -1;
-    serviceRef.current.setPosition(gameState, player);
-  }, [gameState, isAIReady]);
 
   return {
     gameState: displayState,
@@ -511,7 +329,6 @@ export function useBoopGame(
     historyLength: gameHistory.length,
     canGoBack,
     canGoForward,
-    alphaZeroService: serviceRef.current,
     selectPieceType,
     placePiece,
     selectGraduation,

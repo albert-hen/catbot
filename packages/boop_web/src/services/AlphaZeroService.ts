@@ -1,25 +1,19 @@
 /**
  * AlphaZero Service
  *
- * Unified main thread wrapper for the AlphaZero web worker.
- * Provides both AI move selection and analysis from a single worker/runtime.
+ * Thin main-thread wrapper for the AlphaZero web worker.
+ * Provides position management, move selection, and tree snapshots.
  */
 
 import type {
-  AnalysisConfig,
   AnalysisResult,
   AlphaZeroWorkerMessage,
   AlphaZeroWorkerResponse,
 } from '../game/analysisTypes';
 import { GameState, gameStateToTensor, getCanonicalForm } from '../game';
 
-export type AnalysisUpdateCallback = (result: AnalysisResult) => void;
-
 export type AlphaZeroServiceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 
-/**
- * AlphaZeroService - Manages the unified AlphaZero web worker
- */
 export class AlphaZeroService {
   private worker: Worker | null = null;
   private status: AlphaZeroServiceStatus = 'uninitialized';
@@ -29,12 +23,12 @@ export class AlphaZeroService {
     resolve: (action: number) => void;
     reject: (error: Error) => void;
   } | null = null;
-  private analysisCallback: AnalysisUpdateCallback | null = null;
+  private pendingSnapshot: {
+    resolve: (result: AnalysisResult) => void;
+    reject: (error: Error) => void;
+  } | null = null;
   private currentPositionHash: string = '';
 
-  /**
-   * Initialize the worker and load the model
-   */
   async initialize(modelUrl?: string): Promise<void> {
     modelUrl = modelUrl ?? `${import.meta.env.BASE_URL}model.onnx`;
     if (this.status === 'ready' || this.status === 'initializing') {
@@ -97,9 +91,10 @@ export class AlphaZeroService {
         }
         break;
 
-      case 'analysisUpdate':
-        if (this.analysisCallback) {
-          this.analysisCallback(msg.result);
+      case 'snapshot':
+        if (this.pendingSnapshot) {
+          this.pendingSnapshot.resolve(msg.result);
+          this.pendingSnapshot = null;
         }
         break;
 
@@ -114,6 +109,10 @@ export class AlphaZeroService {
           this.pendingMoveRequest.reject(new Error(msg.message));
           this.pendingMoveRequest = null;
         }
+        if (this.pendingSnapshot) {
+          this.pendingSnapshot.reject(new Error(msg.message));
+          this.pendingSnapshot = null;
+        }
         break;
     }
   }
@@ -126,10 +125,6 @@ export class AlphaZeroService {
     this.worker.postMessage(msg);
   }
 
-  /**
-   * Update the current game position for the worker to search.
-   * The persistent MCTS tree is reused — existing nodes carry over.
-   */
   setPosition(gameState: GameState, player: 1 | -1): void {
     if (this.status !== 'ready') return;
 
@@ -147,10 +142,6 @@ export class AlphaZeroService {
     });
   }
 
-  /**
-   * Request the best move for the current position.
-   * The worker will ensure at least numSimulations have been run, then return.
-   */
   async selectAction(
     gameState: GameState,
     player: 1 | -1,
@@ -164,7 +155,6 @@ export class AlphaZeroService {
       throw new Error('Move request already in progress');
     }
 
-    // Ensure position is set
     this.setPosition(gameState, player);
 
     return new Promise((resolve, reject) => {
@@ -173,18 +163,20 @@ export class AlphaZeroService {
     });
   }
 
-  /**
-   * Enable or disable analysis updates
-   */
-  setAnalysisEnabled(enabled: boolean, config?: AnalysisConfig): void {
-    this.sendMessage({ type: 'setAnalysisEnabled', enabled, config });
-  }
+  async getSnapshot(): Promise<AnalysisResult> {
+    if (this.status !== 'ready') {
+      throw new Error('AlphaZero service not ready');
+    }
 
-  /**
-   * Register a callback for analysis updates
-   */
-  onAnalysisUpdate(callback: AnalysisUpdateCallback | null): void {
-    this.analysisCallback = callback;
+    // Drop if a snapshot request is already pending
+    if (this.pendingSnapshot) {
+      throw new Error('Snapshot request already in progress');
+    }
+
+    return new Promise((resolve, reject) => {
+      this.pendingSnapshot = { resolve, reject };
+      this.sendMessage({ type: 'getSnapshot' });
+    });
   }
 
   getStatus(): AlphaZeroServiceStatus {
@@ -202,9 +194,9 @@ export class AlphaZeroService {
     }
     this.status = 'uninitialized';
     this.pendingMoveRequest = null;
+    this.pendingSnapshot = null;
     this.initResolve = null;
     this.initReject = null;
-    this.analysisCallback = null;
     this.currentPositionHash = '';
   }
 

@@ -17,15 +17,13 @@ function App() {
     gray: 'human',
   });
   const [aiConfig, setAIConfig] = useState<AIConfig>(() => {
-    // Load delay from localStorage if available
     const savedDelay = localStorage.getItem('boop_ai_delay');
-    return { 
+    return {
       numSimulations: 256,
       moveDelayMs: savedDelay !== null ? parseInt(savedDelay, 10) : 1000,
     };
   });
   const [animationConfig, setAnimationConfig] = useState<AnimationConfig>(() => {
-    // Load from localStorage if available
     const saved = localStorage.getItem('boop_animation_enabled');
     return { enabled: saved !== null ? saved === 'true' : true };
   });
@@ -43,10 +41,8 @@ function App() {
     };
   });
 
-  // Analysis highlight (when hovering over a move in the analysis panel)
   const [analysisHighlight, setAnalysisHighlight] = useState<Position | null>(null);
 
-  // Game hook (AI model is loaded in the worker)
   const {
     gameState,
     selectedPieceType,
@@ -63,7 +59,6 @@ function App() {
     historyLength,
     canGoBack,
     canGoForward,
-    alphaZeroService,
     selectPieceType,
     placePiece,
     selectGraduation,
@@ -79,13 +74,8 @@ function App() {
     playerConfig,
     aiConfig,
     animationConfig,
-    modelUrl: `${import.meta.env.BASE_URL}model.onnx`,
   });
 
-  // Determine current player for analysis
-  const currentPlayer: 1 | -1 = gameState.currentTurn === 'orange' ? 1 : -1;
-
-  // Analysis hook
   const {
     analysis,
     isAnalyzing,
@@ -93,19 +83,17 @@ function App() {
     error: analysisError,
     config: analysisConfigState,
     updateConfig: updateAnalysisConfig,
-  } = useAnalysis(alphaZeroService, gameState, currentPlayer, {
+  } = useAnalysis({
     enabled: analysisConfig.enabled && !gameState.gameOver && gamePhase !== 'setup',
     config: analysisConfig,
   });
-  
-  // Handle cell click
+
   const handleCellClick = useCallback((position: Position) => {
     if (gameState.stateMode === 'waiting_for_placement') {
       placePiece(position);
     }
   }, [gameState.stateMode, placePiece]);
 
-  // Handle analysis config change
   const handleAnalysisConfigChange = useCallback((config: Partial<AnalysisConfig>) => {
     setAnalysisConfig(prev => {
       const updated = { ...prev, ...config };
@@ -115,23 +103,19 @@ function App() {
     });
   }, [updateAnalysisConfig]);
 
-  // Handle move hover from analysis panel
   const handleMoveHover = useCallback((position: Position | null) => {
     setAnalysisHighlight(position);
   }, []);
-  
-  // Handle player config change (only in setup phase, so no reset needed)
+
   const handlePlayerConfigChange = useCallback((config: PlayerConfig) => {
     setPlayerConfig(config);
   }, []);
-  
-  // Handle AI config change (persist delay to localStorage)
+
   const handleAIConfigChange = useCallback((config: AIConfig) => {
     setAIConfig(config);
     localStorage.setItem('boop_ai_delay', String(config.moveDelayMs));
   }, []);
-  
-  // Handle animation config change (persist to localStorage)
+
   const handleAnimationConfigChange = useCallback((config: AnimationConfig) => {
     setAnimationConfig(config);
     localStorage.setItem('boop_animation_enabled', String(config.enabled));

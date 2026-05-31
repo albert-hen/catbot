@@ -1,14 +1,13 @@
 /**
  * AlphaZero Worker
  *
- * Unified web worker that runs a single ONNX runtime and persistent MCTS tree.
- * Handles both AI move selection and continuous analysis from a single thread.
- * The MCTS tree persists across moves, reusing explored nodes.
+ * Web worker with a single ONNX runtime and persistent MCTS tree.
+ * Searches continuously in the background. The main thread controls
+ * position and requests moves/snapshots via simple messages.
  */
 
 import * as ort from 'onnxruntime-web';
 import type {
-  AnalysisConfig,
   AnalysisResult,
   AlphaZeroWorkerMessage,
   AlphaZeroWorkerResponse,
@@ -31,12 +30,10 @@ import {
 const BOARD_SIZE = 6;
 const EPS = 1e-8;
 const CPUCT = 1.0;
-const MAX_NODES = 1000000;
-
 // ONNX session
 let session: ort.InferenceSession | null = null;
 
-// Persistent MCTS tree (shared across AI and analysis)
+// Persistent MCTS tree
 let Qsa: Map<string, number> = new Map();
 let Nsa: Map<string, number> = new Map();
 let Ns: Map<string, number> = new Map();
@@ -44,31 +41,19 @@ let Ps: Map<string, Float32Array> = new Map();
 let Es: Map<string, number> = new Map();
 let Vs: Map<string, Float32Array> = new Map();
 
-// Current position state
+// Current position (swapped atomically by message handler)
 let currentPosition: Float32Array | null = null;
 let currentPlayer: 1 | -1 = 1;
+let positionSetTime: number = Date.now();
 
-// Analysis state
-let analysisEnabled = false;
-let analysisConfig: AnalysisConfig | null = null;
-let analysisRunning = false;
-let abortAnalysis = false;
+// Move request (set by message handler, consumed by background loop)
+let searchingForMove = false;
+let moveTargetSims = 0;
 
-// Move request state
-let moveRequested = false;
-let moveNumSimulations = 0;
-let moveResolve: (() => void) | null = null;
-
-/**
- * Send a message to the main thread
- */
 function sendMessage(msg: AlphaZeroWorkerResponse): void {
   self.postMessage(msg);
 }
 
-/**
- * Initialize ONNX Runtime and load the model
- */
 async function initModel(modelUrl: string): Promise<void> {
   try {
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
@@ -80,15 +65,15 @@ async function initModel(modelUrl: string): Promise<void> {
     console.log('[AlphaZeroWorker] Model loaded successfully');
 
     sendMessage({ type: 'ready' });
+
+    // Start the background search loop
+    backgroundLoop();
   } catch (error) {
     console.error('[AlphaZeroWorker] Failed to load model:', error);
     sendMessage({ type: 'error', message: `Failed to load model: ${error}` });
   }
 }
 
-/**
- * Run neural network prediction
- */
 async function predict(boardState: Float32Array): Promise<{ policy: Float32Array; value: number }> {
   if (!session) {
     throw new Error('Model not loaded');
@@ -118,9 +103,6 @@ async function predict(boardState: Float32Array): Promise<{ policy: Float32Array
   return { policy, value };
 }
 
-/**
- * Convert tensor to string for hashing
- */
 function tensorToString(tensor: Float32Array): string {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
   const c0 = tensor[0];
@@ -139,9 +121,6 @@ function tensorToString(tensor: Float32Array): string {
   return `${c0},${c5},${c6},${c7},${c8},${pieces.join('')}`;
 }
 
-/**
- * Check if game ended from tensor representation.
- */
 function checkGameEndedFromTensor(tensor: Float32Array): number {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
 
@@ -178,9 +157,6 @@ function checkGameEndedFromTensor(tensor: Float32Array): number {
   return 0;
 }
 
-/**
- * Get valid moves from tensor representation.
- */
 function getValidMovesFromTensor(tensor: Float32Array): Float32Array {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
   const state = new GameState();
@@ -217,9 +193,6 @@ function getValidMovesFromTensor(tensor: Float32Array): Float32Array {
   return getValidMoves(state, 1);
 }
 
-/**
- * Apply action to tensor and return new tensor + next player.
- */
 function applyActionToTensor(tensor: Float32Array, action: number): [Float32Array, 1 | -1] {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
   const state = new GameState();
@@ -259,55 +232,6 @@ function applyActionToTensor(tensor: Float32Array, action: number): [Float32Arra
   return [newTensor, nextPlayer];
 }
 
-/**
- * Prune MCTS tree by evicting least-visited nodes when over budget.
- */
-function pruneIfNeeded(): void {
-  if (Ns.size <= MAX_NODES) return;
-
-  // Collect all state keys with their visit counts
-  const entries: [string, number][] = [];
-  for (const [key, visits] of Ns) {
-    entries.push([key, visits]);
-  }
-
-  // Sort by visits ascending (evict least visited first)
-  entries.sort((a, b) => a[1] - b[1]);
-
-  // Keep the current root if we have one
-  const rootHash = currentPosition ? tensorToString(currentPosition) : null;
-
-  // Evict until under budget
-  const toEvict = entries.length - MAX_NODES;
-  let evicted = 0;
-  for (const [stateKey] of entries) {
-    if (evicted >= toEvict) break;
-    if (stateKey === rootHash) continue; // Never evict root
-
-    // Remove from all maps
-    Ns.delete(stateKey);
-    Ps.delete(stateKey);
-    Es.delete(stateKey);
-    Vs.delete(stateKey);
-
-    // Remove all (state, action) entries for this state
-    for (let a = 0; a < ACTION_SIZE; a++) {
-      const saKey = `${stateKey},${a}`;
-      Qsa.delete(saKey);
-      Nsa.delete(saKey);
-    }
-
-    evicted++;
-  }
-
-  if (evicted > 0) {
-    console.log(`[AlphaZeroWorker] Pruned ${evicted} nodes, ${Ns.size} remaining`);
-  }
-}
-
-/**
- * Perform one MCTS simulation
- */
 async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): Promise<number> {
   const s = tensorToString(canonicalBoard);
 
@@ -324,7 +248,6 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
     return ended;
   }
 
-  // Leaf node - expand
   if (!Ps.has(s)) {
     const { policy, value } = await predict(canonicalBoard);
     const valids = getValidMovesFromTensor(canonicalBoard);
@@ -360,7 +283,6 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
     return value;
   }
 
-  // Internal node - select action with highest UCB
   const valids = Vs.get(s)!;
   const ps = Ps.get(s)!;
   const ns = Ns.get(s)!;
@@ -422,18 +344,12 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
   return v;
 }
 
-/**
- * Get the number of simulations run for the current root position
- */
 function getRootSimCount(): number {
   if (!currentPosition) return 0;
   const s = tensorToString(currentPosition);
   return Ns.get(s) ?? 0;
 }
 
-/**
- * Get best action from current tree for the root position
- */
 function getBestAction(): number {
   if (!currentPosition) return -1;
 
@@ -458,9 +374,6 @@ function getBestAction(): number {
   return bestAction;
 }
 
-/**
- * Get move description from action
- */
 function getMoveDescription(action: number): string {
   const { position, moveType } = actionToMove(action);
   const [row, col] = position;
@@ -485,23 +398,18 @@ function getMoveDescription(action: number): string {
   }
 }
 
-/**
- * Build analysis result from current MCTS state
- */
-function buildAnalysisResult(startTime: number): AnalysisResult {
+function buildAnalysisResult(): AnalysisResult {
   if (!currentPosition) {
     throw new Error('No position to analyze');
   }
 
   const s = tensorToString(currentPosition);
-  const positionHash = s;
   const totalSims = Ns.get(s) ?? 0;
 
   const ps = Ps.get(s);
   const ns = totalSims;
   const valids = Vs.get(s);
 
-  // Calculate value from weighted Q values
   let rawValue = 0;
   if (ps) {
     let totalVisits = 0;
@@ -520,7 +428,6 @@ function buildAnalysisResult(startTime: number): AnalysisResult {
     }
   }
 
-  // Build top moves
   const topMoves: MoveCandidate[] = [];
   if (ps && valids) {
     const actions: ActionStats[] = [];
@@ -560,7 +467,6 @@ function buildAnalysisResult(startTime: number): AnalysisResult {
     }
   }
 
-  // Build policy overlay from visit counts
   const cellProbabilities = new Map<string, number>();
   let maxProbability = 0;
 
@@ -591,7 +497,6 @@ function buildAnalysisResult(startTime: number): AnalysisResult {
     maxProbability,
   };
 
-  // Convert value to Orange's perspective
   const orangeValue = currentPlayer === 1 ? rawValue : -rawValue;
   const winProb = ((orangeValue + 1) / 2) * 100;
   const player = currentPlayer === 1 ? 'orange' : 'gray';
@@ -607,7 +512,7 @@ function buildAnalysisResult(startTime: number): AnalysisResult {
 
   return {
     timestamp: Date.now(),
-    positionHash,
+    positionHash: s,
     currentPlayer: player,
     evaluation,
     topMoves,
@@ -615,145 +520,54 @@ function buildAnalysisResult(startTime: number): AnalysisResult {
     searchStats: {
       totalSimulations: totalSims,
       nodesExplored: Ns.size,
-      searchTimeMs: Date.now() - startTime,
+      searchTimeMs: Date.now() - positionSetTime,
     },
     status: 'analyzing',
   };
 }
 
 /**
- * Main continuous search loop.
- * Runs MCTS simulations on the current position.
- * Pauses when a move is requested, fulfills it, then resumes.
- * Sends analysis updates periodically when analysis is enabled.
+ * Background search loop. Runs forever after model loads.
+ * Searches the current position continuously. When a move is requested,
+ * runs remaining sims and returns the result, then resumes background search.
  */
-async function runSearchLoop(): Promise<void> {
-  if (!session || !currentPosition) return;
-
-  analysisRunning = true;
-  abortAnalysis = false;
-
-  const startTime = Date.now();
-  let lastUpdateTime = startTime;
-
-  try {
-    while (!abortAnalysis) {
-      // Check if a move has been requested
-      if (moveRequested) {
-        // Run additional sims if needed to reach the requested count
-        const currentSims = getRootSimCount();
-        const remaining = moveNumSimulations - currentSims;
-
-        if (remaining > 0) {
-          let lastMoveUpdateTime = Date.now();
-          for (let i = 0; i < remaining && !abortAnalysis; i++) {
-            await mctsSearch(currentPosition!, new Set());
-            if (analysisEnabled && analysisConfig) {
-              const now = Date.now();
-              if (now - lastMoveUpdateTime >= analysisConfig.updateIntervalMs) {
-                try {
-                  const result = buildAnalysisResult(startTime);
-                  sendMessage({ type: 'analysisUpdate', result });
-                } catch (_) {}
-                lastMoveUpdateTime = now;
-              }
-            }
-          }
-        }
-
-        // Return the best action
-        const action = getBestAction();
-        if (action >= 0) {
-          sendMessage({ type: 'moveResult', action });
-        } else {
-          sendMessage({ type: 'error', message: 'No valid action found' });
-        }
-
-        moveRequested = false;
-        moveNumSimulations = 0;
-        if (moveResolve) {
-          moveResolve();
-          moveResolve = null;
-        }
-
-        // Send analysis update with the fully-searched tree
-        if (analysisEnabled && analysisConfig) {
-          try {
-            const result = buildAnalysisResult(startTime);
-            sendMessage({ type: 'analysisUpdate', result });
-          } catch (_) {}
-        }
-
-        // Continue searching after returning the move
-        continue;
-      }
-
-      // Run a batch of simulations
-      const batchSize = 10;
-      for (let i = 0; i < batchSize && !abortAnalysis && !moveRequested; i++) {
-        try {
-          await mctsSearch(currentPosition!, new Set());
-        } catch (searchError) {
-          console.error('[AlphaZeroWorker] Error in mctsSearch:', searchError);
-        }
-      }
-
-      // Prune if tree is too large
-      pruneIfNeeded();
-
-      // Send analysis update if enabled and enough time has passed
-      if (analysisEnabled && analysisConfig) {
-        const now = Date.now();
-        if (now - lastUpdateTime >= analysisConfig.updateIntervalMs) {
-          try {
-            const result = buildAnalysisResult(startTime);
-            sendMessage({ type: 'analysisUpdate', result });
-            lastUpdateTime = now;
-          } catch (buildError) {
-            console.error('[AlphaZeroWorker] Error building result:', buildError);
-          }
-        }
-      }
-
-      // Yield to allow message processing
-      await new Promise(resolve => setTimeout(resolve, 0));
+async function backgroundLoop(): Promise<void> {
+  while (true) {
+    const pos = currentPosition;
+    if (!pos) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      continue;
     }
-  } catch (error) {
-    console.error('[AlphaZeroWorker] Error in search loop:', error);
-    sendMessage({ type: 'error', message: `Search error: ${error}` });
-  } finally {
-    analysisRunning = false;
-    console.log('[AlphaZeroWorker] Search loop ended');
+
+    // Fulfill move request: run sims until target, return best action
+    if (searchingForMove) {
+      const remaining = moveTargetSims - getRootSimCount();
+      for (let i = 0; i < remaining; i++) {
+        await mctsSearch(pos, new Set());
+        // Yield every 50 sims to allow getSnapshot messages through
+        if (i % 50 === 49) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+
+      const action = getBestAction();
+      if (action >= 0) {
+        sendMessage({ type: 'moveResult', action });
+      } else {
+        sendMessage({ type: 'error', message: 'No valid action found' });
+      }
+
+      searchingForMove = false;
+      moveTargetSims = 0;
+      continue;
+    }
+
+    // Background search: run a batch, yield
+    for (let i = 0; i < 10; i++) {
+      await mctsSearch(pos, new Set());
+    }
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
-}
-
-/**
- * Set a new position. The tree is kept (nodes are reused).
- */
-function setPosition(position: Float32Array, player: 1 | -1): void {
-  currentPosition = position;
-  currentPlayer = player;
-
-  // Tree is kept — existing nodes for this position (and its children)
-  // will be reused automatically on the next search.
-  console.log(`[AlphaZeroWorker] Position set, tree has ${Ns.size} nodes`);
-}
-
-/**
- * Start or restart the search loop for the current position
- */
-async function ensureSearchRunning(): Promise<void> {
-  if (analysisRunning) {
-    // Already running, it will pick up the new position naturally
-    return;
-  }
-
-  if (!session || !currentPosition) return;
-
-  runSearchLoop().catch(err => {
-    console.error('[AlphaZeroWorker] Unhandled error in search loop:', err);
-    sendMessage({ type: 'error', message: `Search error: ${err}` });
-  });
 }
 
 /**
@@ -765,59 +579,26 @@ self.onmessage = async (event: MessageEvent<AlphaZeroWorkerMessage>) => {
   try {
     switch (msg.type) {
       case 'init':
-        console.log('[AlphaZeroWorker] Received init message');
         await initModel(msg.modelUrl);
         break;
 
-      case 'setPosition': {
-        // Stop current search loop
-        abortAnalysis = true;
-
-        // Wait for loop to stop
-        let waitCount = 0;
-        while (analysisRunning && waitCount < 100) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-          waitCount++;
-        }
-        if (analysisRunning) {
-          console.warn('[AlphaZeroWorker] Timeout waiting for search loop to stop');
-          analysisRunning = false;
-        }
-
-        setPosition(msg.position, msg.player);
-
-        // Restart the search loop
-        ensureSearchRunning();
+      case 'setPosition':
+        currentPosition = msg.position;
+        currentPlayer = msg.player;
+        positionSetTime = Date.now();
         break;
-      }
 
       case 'requestMove':
-        console.log(`[AlphaZeroWorker] Move requested (${msg.numSimulations} sims)`);
-        moveRequested = true;
-        moveNumSimulations = msg.numSimulations;
-
-        // If the loop isn't running, we need to start it
-        if (!analysisRunning && currentPosition) {
-          ensureSearchRunning();
-        }
+        searchingForMove = true;
+        moveTargetSims = msg.numSimulations;
         break;
 
-      case 'setAnalysisEnabled':
-        analysisEnabled = msg.enabled;
-        if (msg.config) {
-          analysisConfig = msg.config;
+      case 'getSnapshot':
+        if (currentPosition) {
+          sendMessage({ type: 'snapshot', result: buildAnalysisResult() });
+        } else {
+          sendMessage({ type: 'error', message: 'No position set' });
         }
-        console.log(`[AlphaZeroWorker] Analysis ${msg.enabled ? 'enabled' : 'disabled'}`);
-
-        // If enabling and we have a position, ensure search is running
-        if (msg.enabled && currentPosition && !analysisRunning) {
-          ensureSearchRunning();
-        }
-        break;
-
-      case 'stop':
-        console.log('[AlphaZeroWorker] Received stop message');
-        abortAnalysis = true;
         break;
     }
   } catch (error) {
@@ -825,5 +606,3 @@ self.onmessage = async (event: MessageEvent<AlphaZeroWorkerMessage>) => {
     sendMessage({ type: 'error', message: `Worker error: ${error}` });
   }
 };
-
-console.log('[AlphaZeroWorker] Worker initialized');
