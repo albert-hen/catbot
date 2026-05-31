@@ -1,15 +1,16 @@
 /**
  * useAnalysis - React hook for board analysis
  *
- * Manages the analysis service and provides analysis results to components.
+ * Consumes the shared AlphaZeroService to receive analysis updates.
+ * Does NOT create its own worker — the service is shared with useBoopGame.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type {
   AnalysisResult,
   AnalysisConfig,
 } from '../game/analysisTypes';
-import { AnalysisService } from '../services/AnalysisService';
+import type { AlphaZeroService } from '../services/AlphaZeroService';
 import type { GameState } from '../game';
 
 /**
@@ -18,8 +19,6 @@ import type { GameState } from '../game';
 export interface UseAnalysisOptions {
   /** Whether analysis is enabled */
   enabled: boolean;
-  /** Model URL for the neural network */
-  modelUrl?: string;
   /** Analysis configuration overrides */
   config?: Partial<AnalysisConfig>;
 }
@@ -30,42 +29,35 @@ export interface UseAnalysisOptions {
 export interface UseAnalysisReturn {
   /** Current analysis result (null if not analyzing) */
   analysis: AnalysisResult | null;
-
   /** Whether analysis is currently running */
   isAnalyzing: boolean;
-
   /** Whether the analysis service is ready */
   isReady: boolean;
-
   /** Any error that occurred */
   error: string | null;
-
   /** Current analysis configuration */
   config: AnalysisConfig;
-
   /** Update analysis configuration */
   updateConfig: (config: Partial<AnalysisConfig>) => void;
-
-  /** Manually trigger analysis restart */
-  restartAnalysis: () => void;
 }
 
 /**
- * Hook for managing board analysis
+ * Hook for managing board analysis via the shared AlphaZeroService.
  *
+ * @param service - Shared AlphaZeroService instance (from useBoopGame)
  * @param gameState - Current game state to analyze
  * @param player - Current player (1 = orange, -1 = gray)
  * @param options - Analysis options
  */
 export function useAnalysis(
+  service: AlphaZeroService | null,
   gameState: GameState | null,
   player: 1 | -1,
   options: UseAnalysisOptions
 ): UseAnalysisReturn {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [config, setConfig] = useState<AnalysisConfig>(() => ({
     enabled: false,
     simulationsPerCycle: 100,
@@ -76,104 +68,54 @@ export function useAnalysis(
     ...options.config,
   }));
 
-  const serviceRef = useRef<AnalysisService | null>(null);
-  const initializingRef = useRef(false);
+  const isReady = service?.isReady() ?? false;
 
-  // Initialize the analysis service on mount (always load the engine)
+  const gameOver = gameState?.gameOver ?? false;
+
+  // Enable/disable analysis and register callback (independent of position changes)
   useEffect(() => {
-    if (initializingRef.current || serviceRef.current) {
-      return;
-    }
+    if (!service || !isReady) return;
 
-    initializingRef.current = true;
-
-    const initService = async () => {
-      try {
-        const service = new AnalysisService(config);
-        await service.initialize(options.modelUrl);
-        serviceRef.current = service;
-        setIsReady(true);
-        setError(null);
-      } catch (err) {
-        console.error('[useAnalysis] Failed to initialize:', err);
-        setError(err instanceof Error ? err.message : 'Failed to initialize analysis');
-      } finally {
-        initializingRef.current = false;
-      }
-    };
-
-    initService();
-
-    return () => {
-      if (serviceRef.current) {
-        serviceRef.current.terminate();
-        serviceRef.current = null;
-      }
-      setIsReady(false);
-    };
-  }, [options.modelUrl]);
-
-  // Handle analysis updates
-  const handleAnalysisUpdate = useCallback((result: AnalysisResult) => {
-    setAnalysis(result);
-    setIsAnalyzing(result.status === 'analyzing');
-  }, []);
-
-  // Start/stop analysis based on options and game state
-  useEffect(() => {
-    if (!serviceRef.current || !isReady || !gameState) {
-      return;
-    }
-
-    if (!options.enabled || gameState.gameOver) {
-      // Stop analysis
-      serviceRef.current.stopAnalysis();
+    if (!options.enabled || gameOver) {
+      service.setAnalysisEnabled(false);
+      service.onAnalysisUpdate(null);
       setIsAnalyzing(false);
       return;
     }
 
-    // Start or update analysis
+    service.setAnalysisEnabled(true, config);
+    service.onAnalysisUpdate((result: AnalysisResult) => {
+      setAnalysis(result);
+      setIsAnalyzing(result.status === 'analyzing');
+    });
     setIsAnalyzing(true);
-    serviceRef.current.startAnalysis(gameState, player, handleAnalysisUpdate);
 
     return () => {
-      if (serviceRef.current) {
-        serviceRef.current.stopAnalysis();
+      if (service) {
+        service.setAnalysisEnabled(false);
+        service.onAnalysisUpdate(null);
       }
     };
-  }, [options.enabled, isReady, gameState, player, handleAnalysisUpdate]);
+  }, [service, isReady, options.enabled, gameOver, config]);
 
-  // Update position when game state changes
+  // Update position on the service when game state changes
   useEffect(() => {
-    if (!serviceRef.current || !isReady || !options.enabled || !gameState || gameState.gameOver) {
+    if (!service || !isReady || !options.enabled || !gameState || gameState.gameOver) {
       return;
     }
-
-    serviceRef.current.updatePosition(gameState, player);
-  }, [gameState, player, isReady, options.enabled]);
+    service.setPosition(gameState, player);
+  }, [service, gameState, player, isReady, options.enabled]);
 
   // Update config
   const updateConfig = useCallback((newConfig: Partial<AnalysisConfig>) => {
     setConfig(prev => {
       const updated = { ...prev, ...newConfig };
-      if (serviceRef.current) {
-        serviceRef.current.updateConfig(updated);
+      if (service && isReady) {
+        service.setAnalysisEnabled(options.enabled, updated);
       }
       return updated;
     });
-  }, []);
-
-  // Restart analysis manually
-  const restartAnalysis = useCallback(() => {
-    if (!serviceRef.current || !isReady || !gameState || !options.enabled) {
-      return;
-    }
-
-    serviceRef.current.stopAnalysis();
-    setAnalysis(null);
-    setIsAnalyzing(true);
-    serviceRef.current.startAnalysis(gameState, player, handleAnalysisUpdate);
-  }, [isReady, gameState, player, options.enabled, handleAnalysisUpdate]);
+  }, [service, isReady, options.enabled]);
 
   return {
     analysis,
@@ -182,6 +124,5 @@ export function useAnalysis(
     error,
     config,
     updateConfig,
-    restartAnalysis,
   };
 }

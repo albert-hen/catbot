@@ -63,6 +63,7 @@ function App() {
     historyLength,
     canGoBack,
     canGoForward,
+    alphaZeroService,
     selectPieceType,
     placePiece,
     selectGraduation,
@@ -92,9 +93,8 @@ function App() {
     error: analysisError,
     config: analysisConfigState,
     updateConfig: updateAnalysisConfig,
-  } = useAnalysis(gameState, currentPlayer, {
+  } = useAnalysis(alphaZeroService, gameState, currentPlayer, {
     enabled: analysisConfig.enabled && !gameState.gameOver && gamePhase !== 'setup',
-    modelUrl: `${import.meta.env.BASE_URL}model.onnx`,
     config: analysisConfig,
   });
   

@@ -174,3 +174,22 @@ export type AIWorkerResponse =
   | { type: 'ready' }
   | { type: 'action'; action: number }
   | { type: 'error'; message: string };
+
+/**
+ * Messages sent to the unified AlphaZero worker
+ */
+export type AlphaZeroWorkerMessage =
+  | { type: 'init'; modelUrl: string }
+  | { type: 'setPosition'; position: Float32Array; player: 1 | -1 }
+  | { type: 'requestMove'; numSimulations: number }
+  | { type: 'setAnalysisEnabled'; enabled: boolean; config?: AnalysisConfig }
+  | { type: 'stop' };
+
+/**
+ * Messages sent from the unified AlphaZero worker
+ */
+export type AlphaZeroWorkerResponse =
+  | { type: 'ready' }
+  | { type: 'analysisUpdate'; result: AnalysisResult }
+  | { type: 'moveResult'; action: number }
+  | { type: 'error'; message: string };

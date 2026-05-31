@@ -15,7 +15,7 @@ import {
   MoveType,
   ANIMATION_DURATION_MS,
 } from '../game';
-import { AIService } from '../services/AIService';
+import { AlphaZeroService } from '../services/AlphaZeroService';
 
 export interface PlayerConfig {
   orange: 'human' | 'ai';
@@ -70,6 +70,9 @@ export interface UseBoopGameResult {
   canGoBack: boolean;
   canGoForward: boolean;
 
+  // Shared AlphaZero service (for use by useAnalysis)
+  alphaZeroService: AlphaZeroService | null;
+
   // Actions
   selectPieceType: (pieceType: PieceType) => void;
   placePiece: (position: Position) => void;
@@ -106,31 +109,32 @@ export function useBoopGame(
   const [isPaused, setIsPaused] = useState(false);
   const [viewingHistoryIndex, setViewingHistoryIndex] = useState<number | null>(null);
 
-  // AI service state
+  // AlphaZero service state
   const [isAIReady, setIsAIReady] = useState(false);
-  const aiServiceRef = useRef<AIService | null>(null);
+  const serviceRef = useRef<AlphaZeroService | null>(null);
   const processingRef = useRef(false);
+  const generationRef = useRef(0);
 
-  // Initialize AI service on mount
+  // Initialize AlphaZero service on mount
   useEffect(() => {
     const initAI = async () => {
       try {
-        const service = new AIService();
+        const service = new AlphaZeroService();
         await service.initialize(options.modelUrl ?? `${import.meta.env.BASE_URL}model.onnx`);
-        aiServiceRef.current = service;
+        serviceRef.current = service;
         setIsAIReady(true);
-        console.log('[useBoopGame] AI service initialized');
+        console.log('[useBoopGame] AlphaZero service initialized');
       } catch (error) {
-        console.error('[useBoopGame] Failed to initialize AI service:', error);
+        console.error('[useBoopGame] Failed to initialize AlphaZero service:', error);
       }
     };
 
     initAI();
 
     return () => {
-      if (aiServiceRef.current) {
-        aiServiceRef.current.terminate();
-        aiServiceRef.current = null;
+      if (serviceRef.current) {
+        serviceRef.current.terminate();
+        serviceRef.current = null;
       }
       setIsAIReady(false);
     };
@@ -148,7 +152,7 @@ export function useBoopGame(
     if (processingRef.current) return;
     if (gameState.gameOver) return;
     if (gamePhase !== 'playing') return; // Only move during playing phase
-    if (!aiServiceRef.current || !isAIReady) return;
+    if (!serviceRef.current || !isAIReady) return;
     if (isAnimating) return; // Wait for animation to complete
     if (isPaused) return; // Don't move while paused
     if (viewingHistoryIndex !== null) return; // Don't move while viewing history
@@ -161,24 +165,28 @@ export function useBoopGame(
     processingRef.current = true;
     setIsAIThinking(true);
     options.onAIThinking?.(true);
+    const gen = generationRef.current;
 
     try {
       // Apply configured delay before AI move
       const delay = Math.max(100, options.aiConfig.moveDelayMs || 100);
       await new Promise(resolve => setTimeout(resolve, delay));
 
-      // Check if we got paused during the delay
-      if (isPaused) {
+      // Check if game was reset or paused during the delay
+      if (gen !== generationRef.current || isPaused) {
         return;
       }
 
       const player: 1 | -1 = currentPlayer === 'orange' ? 1 : -1;
-      const action = await aiServiceRef.current.selectAction(
+      const action = await serviceRef.current.selectAction(
         gameState,
         player,
         options.aiConfig.numSimulations
       );
-      
+
+      // Game was reset while waiting for the move — discard it
+      if (gen !== generationRef.current) return;
+
       const { position, moveType } = actionToMove(action);
       
       // Save state to history before AI move
@@ -465,6 +473,7 @@ export function useBoopGame(
     setViewingHistoryIndex(null);
     setGamePhase('setup'); // Go back to setup phase
     processingRef.current = false;
+    generationRef.current++;
     // AI worker resets its own MCTS state on each move, so no explicit reset needed
   }, []);
   
@@ -479,6 +488,13 @@ export function useBoopGame(
     ? gameHistory[viewingHistoryIndex] 
     : gameState;
   
+  // Keep the worker's position in sync with the game state
+  useEffect(() => {
+    if (!serviceRef.current || !isAIReady) return;
+    const player: 1 | -1 = gameState.currentTurn === 'orange' ? 1 : -1;
+    serviceRef.current.setPosition(gameState, player);
+  }, [gameState, isAIReady]);
+
   return {
     gameState: displayState,
     selectedPieceType,
@@ -495,6 +511,7 @@ export function useBoopGame(
     historyLength: gameHistory.length,
     canGoBack,
     canGoForward,
+    alphaZeroService: serviceRef.current,
     selectPieceType,
     placePiece,
     selectGraduation,

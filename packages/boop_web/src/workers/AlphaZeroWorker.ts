@@ -1,16 +1,17 @@
 /**
- * Analysis Worker
+ * AlphaZero Worker
  *
- * Web Worker that runs MCTS analysis in a separate thread.
- * Communicates with the main thread via postMessage.
+ * Unified web worker that runs a single ONNX runtime and persistent MCTS tree.
+ * Handles both AI move selection and continuous analysis from a single thread.
+ * The MCTS tree persists across moves, reusing explored nodes.
  */
 
 import * as ort from 'onnxruntime-web';
 import type {
   AnalysisConfig,
   AnalysisResult,
-  AnalysisWorkerMessage,
-  AnalysisWorkerResponse,
+  AlphaZeroWorkerMessage,
+  AlphaZeroWorkerResponse,
   MoveCandidate,
   PolicyOverlay,
   ActionStats,
@@ -28,30 +29,40 @@ import {
 } from '../game';
 
 const BOARD_SIZE = 6;
+const EPS = 1e-8;
+const CPUCT = 1.0;
+const MAX_NODES = 1000000;
 
-// Worker state
+// ONNX session
 let session: ort.InferenceSession | null = null;
-let isAnalyzing = false;
-let currentPosition: Float32Array | null = null;
-let currentPlayer: 1 | -1 = 1;
-let currentConfig: AnalysisConfig | null = null;
-let abortAnalysis = false;
 
-// MCTS state (rebuilt on each position change)
+// Persistent MCTS tree (shared across AI and analysis)
 let Qsa: Map<string, number> = new Map();
 let Nsa: Map<string, number> = new Map();
 let Ns: Map<string, number> = new Map();
 let Ps: Map<string, Float32Array> = new Map();
-let Es: Map<string, number> = new Map();  // Game ended status
+let Es: Map<string, number> = new Map();
 let Vs: Map<string, Float32Array> = new Map();
 
-const EPS = 1e-8;
-const CPUCT = 1.0;
+// Current position state
+let currentPosition: Float32Array | null = null;
+let currentPlayer: 1 | -1 = 1;
+
+// Analysis state
+let analysisEnabled = false;
+let analysisConfig: AnalysisConfig | null = null;
+let analysisRunning = false;
+let abortAnalysis = false;
+
+// Move request state
+let moveRequested = false;
+let moveNumSimulations = 0;
+let moveResolve: (() => void) | null = null;
 
 /**
  * Send a message to the main thread
  */
-function sendMessage(msg: AnalysisWorkerResponse): void {
+function sendMessage(msg: AlphaZeroWorkerResponse): void {
   self.postMessage(msg);
 }
 
@@ -60,18 +71,17 @@ function sendMessage(msg: AnalysisWorkerResponse): void {
  */
 async function initModel(modelUrl: string): Promise<void> {
   try {
-    // Configure ONNX Runtime for worker context
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
 
-    console.log('[AnalysisWorker] Loading ONNX model...');
+    console.log('[AlphaZeroWorker] Loading ONNX model...');
     session = await ort.InferenceSession.create(modelUrl, {
       executionProviders: ['wasm'],
     });
-    console.log('[AnalysisWorker] Model loaded successfully');
+    console.log('[AlphaZeroWorker] Model loaded successfully');
 
     sendMessage({ type: 'ready' });
   } catch (error) {
-    console.error('[AnalysisWorker] Failed to load model:', error);
+    console.error('[AlphaZeroWorker] Failed to load model:', error);
     sendMessage({ type: 'error', message: `Failed to load model: ${error}` });
   }
 }
@@ -130,20 +140,55 @@ function tensorToString(tensor: Float32Array): string {
 }
 
 /**
+ * Check if game ended from tensor representation.
+ */
+function checkGameEndedFromTensor(tensor: Float32Array): number {
+  const channelSize = BOARD_SIZE * BOARD_SIZE;
+
+  const getAt = (channel: number, row: number, col: number): number => {
+    return tensor[channel * channelSize + row * BOARD_SIZE + col];
+  };
+
+  const checkThreeCats = (catChannel: number): boolean => {
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (getAt(catChannel, r, c) !== 1) continue;
+        if (c <= 3 && getAt(catChannel, r, c + 1) === 1 && getAt(catChannel, r, c + 2) === 1) return true;
+        if (r <= 3 && getAt(catChannel, r + 1, c) === 1 && getAt(catChannel, r + 2, c) === 1) return true;
+        if (r <= 3 && c <= 3 && getAt(catChannel, r + 1, c + 1) === 1 && getAt(catChannel, r + 2, c + 2) === 1) return true;
+        if (r <= 3 && c >= 2 && getAt(catChannel, r + 1, c - 1) === 1 && getAt(catChannel, r + 2, c - 2) === 1) return true;
+      }
+    }
+    return false;
+  };
+
+  const checkEightCats = (catChannel: number): boolean => {
+    let count = 0;
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (getAt(catChannel, r, c) === 1) count++;
+      }
+    }
+    return count === 8;
+  };
+
+  if (checkThreeCats(3) || checkEightCats(3)) return 1;
+  if (checkThreeCats(4) || checkEightCats(4)) return -1;
+
+  return 0;
+}
+
+/**
  * Get valid moves from tensor representation.
- * Reconstructs GameState to properly calculate valid moves.
  */
 function getValidMovesFromTensor(tensor: Float32Array): Float32Array {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
-
-  // Reconstruct game state to get valid moves
   const state = new GameState();
 
   const getAt = (channel: number, row: number, col: number): number => {
     return tensor[channel * channelSize + row * BOARD_SIZE + col];
   };
 
-  // Read piece positions
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
       if (getAt(1, row, col) === 1) state.board[row][col] = 'ok';
@@ -159,7 +204,6 @@ function getValidMovesFromTensor(tensor: Float32Array): Float32Array {
   state.availablePieces.oc = getAt(7, 0, 0);
   state.availablePieces.gc = getAt(8, 0, 0);
 
-  // Canonical form always has player 1 (orange) as current
   state.currentTurn = 'orange';
 
   if (getAt(0, 0, 0) === 0) {
@@ -178,8 +222,6 @@ function getValidMovesFromTensor(tensor: Float32Array): Float32Array {
  */
 function applyActionToTensor(tensor: Float32Array, action: number): [Float32Array, 1 | -1] {
   const channelSize = BOARD_SIZE * BOARD_SIZE;
-
-  // Reconstruct game state
   const state = new GameState();
 
   const getAt = (channel: number, row: number, col: number): number => {
@@ -211,83 +253,69 @@ function applyActionToTensor(tensor: Float32Array, action: number): [Float32Arra
     (state as any).calculateGraduationChoices();
   }
 
-  // Apply action
   const [newState, nextPlayer] = applyAction(state, 1, action);
-
-  // Convert back to tensor
   const newTensor = gameStateToTensor(newState);
 
   return [newTensor, nextPlayer];
 }
 
 /**
- * Check if game ended from tensor representation.
- * Returns 1 if player 1 (canonical) wins, -1 if loses, 0 if not ended.
+ * Prune MCTS tree by evicting least-visited nodes when over budget.
  */
-function checkGameEnded(tensor: Float32Array): number {
-  const channelSize = BOARD_SIZE * BOARD_SIZE;
+function pruneIfNeeded(): void {
+  if (Ns.size <= MAX_NODES) return;
 
-  const getAt = (channel: number, row: number, col: number): number => {
-    return tensor[channel * channelSize + row * BOARD_SIZE + col];
-  };
+  // Collect all state keys with their visit counts
+  const entries: [string, number][] = [];
+  for (const [key, visits] of Ns) {
+    entries.push([key, visits]);
+  }
 
-  const checkThreeCats = (catChannel: number): boolean => {
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        if (getAt(catChannel, r, c) !== 1) continue;
+  // Sort by visits ascending (evict least visited first)
+  entries.sort((a, b) => a[1] - b[1]);
 
-        // Horizontal
-        if (c <= 3 && getAt(catChannel, r, c + 1) === 1 && getAt(catChannel, r, c + 2) === 1) {
-          return true;
-        }
-        // Vertical
-        if (r <= 3 && getAt(catChannel, r + 1, c) === 1 && getAt(catChannel, r + 2, c) === 1) {
-          return true;
-        }
-        // Diagonal down-right
-        if (r <= 3 && c <= 3 && getAt(catChannel, r + 1, c + 1) === 1 && getAt(catChannel, r + 2, c + 2) === 1) {
-          return true;
-        }
-        // Diagonal down-left
-        if (r <= 3 && c >= 2 && getAt(catChannel, r + 1, c - 1) === 1 && getAt(catChannel, r + 2, c - 2) === 1) {
-          return true;
-        }
-      }
+  // Keep the current root if we have one
+  const rootHash = currentPosition ? tensorToString(currentPosition) : null;
+
+  // Evict until under budget
+  const toEvict = entries.length - MAX_NODES;
+  let evicted = 0;
+  for (const [stateKey] of entries) {
+    if (evicted >= toEvict) break;
+    if (stateKey === rootHash) continue; // Never evict root
+
+    // Remove from all maps
+    Ns.delete(stateKey);
+    Ps.delete(stateKey);
+    Es.delete(stateKey);
+    Vs.delete(stateKey);
+
+    // Remove all (state, action) entries for this state
+    for (let a = 0; a < ACTION_SIZE; a++) {
+      const saKey = `${stateKey},${a}`;
+      Qsa.delete(saKey);
+      Nsa.delete(saKey);
     }
-    return false;
-  };
 
-  const checkEightCats = (catChannel: number): boolean => {
-    let count = 0;
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        if (getAt(catChannel, r, c) === 1) count++;
-      }
-    }
-    return count === 8;
-  };
+    evicted++;
+  }
 
-  // Player 1 (orange in canonical) cats are channel 3
-  // Player 2 (gray in canonical) cats are channel 4
-  if (checkThreeCats(3) || checkEightCats(3)) return 1;
-  if (checkThreeCats(4) || checkEightCats(4)) return -1;
-
-  return 0; // Not ended
+  if (evicted > 0) {
+    console.log(`[AlphaZeroWorker] Pruned ${evicted} nodes, ${Ns.size} remaining`);
+  }
 }
 
 /**
- * Run a single MCTS simulation
+ * Perform one MCTS simulation
  */
 async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): Promise<number> {
   const s = tensorToString(canonicalBoard);
 
-  // Check for cycles
   if (visited.has(s)) return 0;
   visited.add(s);
 
-  // Check if terminal state (with caching)
   if (!Es.has(s)) {
-    Es.set(s, checkGameEnded(canonicalBoard));
+    Es.set(s, checkGameEndedFromTensor(canonicalBoard));
   }
 
   const ended = Es.get(s)!;
@@ -301,7 +329,6 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
     const { policy, value } = await predict(canonicalBoard);
     const valids = getValidMovesFromTensor(canonicalBoard);
 
-    // Mask invalid actions
     const maskedPolicy = new Float32Array(ACTION_SIZE);
     let sum = 0;
     for (let a = 0; a < ACTION_SIZE; a++) {
@@ -333,7 +360,7 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
     return value;
   }
 
-  // Select action with highest UCB
+  // Internal node - select action with highest UCB
   const valids = Vs.get(s)!;
   const ps = Ps.get(s)!;
   const ns = Ns.get(s)!;
@@ -367,12 +394,9 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
   }
 
   const a = bestAct;
-
-  // Apply action and get next state
   const [nextState, nextPlayer] = applyActionToTensor(canonicalBoard, a);
   const nextCanonical = getCanonicalForm(nextState, nextPlayer);
 
-  // Recursive search
   let v: number;
   if (nextPlayer === 1) {
     v = await mctsSearch(nextCanonical, visited);
@@ -382,7 +406,6 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
 
   visited.delete(s);
 
-  // Update Q and N values
   const key = `${s},${a}`;
   if (Qsa.has(key)) {
     const oldQ = Qsa.get(key)!;
@@ -397,6 +420,42 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
   Ns.set(s, ns + 1);
 
   return v;
+}
+
+/**
+ * Get the number of simulations run for the current root position
+ */
+function getRootSimCount(): number {
+  if (!currentPosition) return 0;
+  const s = tensorToString(currentPosition);
+  return Ns.get(s) ?? 0;
+}
+
+/**
+ * Get best action from current tree for the root position
+ */
+function getBestAction(): number {
+  if (!currentPosition) return -1;
+
+  const s = tensorToString(currentPosition);
+  const valids = Vs.get(s);
+  if (!valids) return -1;
+
+  let bestAction = -1;
+  let maxVisits = -1;
+
+  for (let a = 0; a < ACTION_SIZE; a++) {
+    if (valids[a] > 0) {
+      const key = `${s},${a}`;
+      const visits = Nsa.get(key) ?? 0;
+      if (visits > maxVisits) {
+        maxVisits = visits;
+        bestAction = a;
+      }
+    }
+  }
+
+  return bestAction;
 }
 
 /**
@@ -429,26 +488,22 @@ function getMoveDescription(action: number): string {
 /**
  * Build analysis result from current MCTS state
  */
-function buildAnalysisResult(
-  positionHash: string,
-  totalSims: number,
-  startTime: number
-): AnalysisResult {
-  if (!currentPosition || !currentConfig) {
+function buildAnalysisResult(startTime: number): AnalysisResult {
+  if (!currentPosition) {
     throw new Error('No position to analyze');
   }
 
   const s = tensorToString(currentPosition);
+  const positionHash = s;
+  const totalSims = Ns.get(s) ?? 0;
 
-  // Get state statistics
   const ps = Ps.get(s);
-  const ns = Ns.get(s) ?? 0;
+  const ns = totalSims;
   const valids = Vs.get(s);
 
-  // Calculate raw value from neural network
+  // Calculate value from weighted Q values
   let rawValue = 0;
   if (ps) {
-    // Use weighted Q values as estimate
     let totalVisits = 0;
     let weightedQ = 0;
     for (let a = 0; a < ACTION_SIZE; a++) {
@@ -465,7 +520,7 @@ function buildAnalysisResult(
     }
   }
 
-  // Build top moves list
+  // Build top moves
   const topMoves: MoveCandidate[] = [];
   if (ps && valids) {
     const actions: ActionStats[] = [];
@@ -485,12 +540,10 @@ function buildAnalysisResult(
       }
     }
 
-    // Sort by visits
     actions.sort((a, b) => b.visits - a.visits);
 
-    // Show all moves with visits > 0
     for (const a of actions) {
-      if (a.visits === 0) continue; // Skip unvisited moves
+      if (a.visits === 0) continue;
       const { position, moveType } = actionToMove(a.action);
 
       topMoves.push({
@@ -507,12 +560,12 @@ function buildAnalysisResult(
     }
   }
 
-  // Build policy overlay from visit counts (not policy priors)
+  // Build policy overlay from visit counts
   const cellProbabilities = new Map<string, number>();
   let maxProbability = 0;
 
   if (valids && ns > 0) {
-    for (let a = 0; a < 72; a++) {  // Only placement actions for overlay
+    for (let a = 0; a < 72; a++) {
       if (valids[a] > 0) {
         const key = `${s},${a}`;
         const nsa = Nsa.get(key) ?? 0;
@@ -522,7 +575,6 @@ function buildAnalysisResult(
         const [row, col] = position;
         const cellKey = `${row},${col}`;
 
-        // Combine kitten and cat visit counts for same position
         const existing = cellProbabilities.get(cellKey) ?? 0;
         const newCount = existing + nsa;
         cellProbabilities.set(cellKey, newCount);
@@ -539,8 +591,7 @@ function buildAnalysisResult(
     maxProbability,
   };
 
-  // Convert value to always be from Orange's perspective for display
-  // rawValue is from current player's perspective, so negate if Gray's turn
+  // Convert value to Orange's perspective
   const orangeValue = currentPlayer === 1 ? rawValue : -rawValue;
   const winProb = ((orangeValue + 1) / 2) * 100;
   const player = currentPlayer === 1 ? 'orange' : 'gray';
@@ -571,132 +622,208 @@ function buildAnalysisResult(
 }
 
 /**
- * Reset MCTS state for new position
+ * Main continuous search loop.
+ * Runs MCTS simulations on the current position.
+ * Pauses when a move is requested, fulfills it, then resumes.
+ * Sends analysis updates periodically when analysis is enabled.
  */
-function resetMCTS(): void {
-  Qsa.clear();
-  Nsa.clear();
-  Ns.clear();
-  Ps.clear();
-  Es.clear();
-  Vs.clear();
-}
+async function runSearchLoop(): Promise<void> {
+  if (!session || !currentPosition) return;
 
-/**
- * Main analysis loop
- */
-async function runAnalysis(): Promise<void> {
-  if (!session || !currentPosition || !currentConfig) {
-    console.log('[AnalysisWorker] Cannot start analysis - missing session, position, or config');
-    return;
-  }
-
-  console.log('[AnalysisWorker] Starting analysis loop');
-  isAnalyzing = true;
+  analysisRunning = true;
   abortAnalysis = false;
-  resetMCTS();
 
-  const positionHash = tensorToString(currentPosition);
   const startTime = Date.now();
-  let totalSims = 0;
   let lastUpdateTime = startTime;
 
   try {
-    while (!abortAnalysis && isAnalyzing) {
+    while (!abortAnalysis) {
+      // Check if a move has been requested
+      if (moveRequested) {
+        // Run additional sims if needed to reach the requested count
+        const currentSims = getRootSimCount();
+        const remaining = moveNumSimulations - currentSims;
+
+        if (remaining > 0) {
+          let lastMoveUpdateTime = Date.now();
+          for (let i = 0; i < remaining && !abortAnalysis; i++) {
+            await mctsSearch(currentPosition!, new Set());
+            if (analysisEnabled && analysisConfig) {
+              const now = Date.now();
+              if (now - lastMoveUpdateTime >= analysisConfig.updateIntervalMs) {
+                try {
+                  const result = buildAnalysisResult(startTime);
+                  sendMessage({ type: 'analysisUpdate', result });
+                } catch (_) {}
+                lastMoveUpdateTime = now;
+              }
+            }
+          }
+        }
+
+        // Return the best action
+        const action = getBestAction();
+        if (action >= 0) {
+          sendMessage({ type: 'moveResult', action });
+        } else {
+          sendMessage({ type: 'error', message: 'No valid action found' });
+        }
+
+        moveRequested = false;
+        moveNumSimulations = 0;
+        if (moveResolve) {
+          moveResolve();
+          moveResolve = null;
+        }
+
+        // Send analysis update with the fully-searched tree
+        if (analysisEnabled && analysisConfig) {
+          try {
+            const result = buildAnalysisResult(startTime);
+            sendMessage({ type: 'analysisUpdate', result });
+          } catch (_) {}
+        }
+
+        // Continue searching after returning the move
+        continue;
+      }
+
       // Run a batch of simulations
       const batchSize = 10;
-      for (let i = 0; i < batchSize && !abortAnalysis; i++) {
+      for (let i = 0; i < batchSize && !abortAnalysis && !moveRequested; i++) {
         try {
           await mctsSearch(currentPosition!, new Set());
-          totalSims++;
         } catch (searchError) {
-          console.error('[AnalysisWorker] Error in mctsSearch:', searchError);
+          console.error('[AlphaZeroWorker] Error in mctsSearch:', searchError);
         }
       }
 
-      // Send update if enough time has passed
-      const now = Date.now();
-      if (now - lastUpdateTime >= currentConfig!.updateIntervalMs) {
-        try {
-          const result = buildAnalysisResult(positionHash, totalSims, startTime);
-          sendMessage({ type: 'update', result });
-          lastUpdateTime = now;
-          console.log(`[AnalysisWorker] Sent update: ${totalSims} sims, ${result.topMoves.length} top moves`);
-        } catch (buildError) {
-          console.error('[AnalysisWorker] Error building result:', buildError);
+      // Prune if tree is too large
+      pruneIfNeeded();
+
+      // Send analysis update if enabled and enough time has passed
+      if (analysisEnabled && analysisConfig) {
+        const now = Date.now();
+        if (now - lastUpdateTime >= analysisConfig.updateIntervalMs) {
+          try {
+            const result = buildAnalysisResult(startTime);
+            sendMessage({ type: 'analysisUpdate', result });
+            lastUpdateTime = now;
+          } catch (buildError) {
+            console.error('[AlphaZeroWorker] Error building result:', buildError);
+          }
         }
       }
 
       // Yield to allow message processing
       await new Promise(resolve => setTimeout(resolve, 0));
     }
-
-    // Send final result
-    if (!abortAnalysis && currentPosition) {
-      const result = buildAnalysisResult(positionHash, totalSims, startTime);
-      result.status = 'complete';
-      sendMessage({ type: 'update', result });
-      console.log('[AnalysisWorker] Sent final result');
-    }
   } catch (error) {
-    console.error('[AnalysisWorker] Error in analysis loop:', error);
-    sendMessage({ type: 'error', message: `Analysis error: ${error}` });
+    console.error('[AlphaZeroWorker] Error in search loop:', error);
+    sendMessage({ type: 'error', message: `Search error: ${error}` });
   } finally {
-    isAnalyzing = false;
-    console.log('[AnalysisWorker] Analysis loop ended');
+    analysisRunning = false;
+    console.log('[AlphaZeroWorker] Search loop ended');
   }
+}
+
+/**
+ * Set a new position. The tree is kept (nodes are reused).
+ */
+function setPosition(position: Float32Array, player: 1 | -1): void {
+  currentPosition = position;
+  currentPlayer = player;
+
+  // Tree is kept — existing nodes for this position (and its children)
+  // will be reused automatically on the next search.
+  console.log(`[AlphaZeroWorker] Position set, tree has ${Ns.size} nodes`);
+}
+
+/**
+ * Start or restart the search loop for the current position
+ */
+async function ensureSearchRunning(): Promise<void> {
+  if (analysisRunning) {
+    // Already running, it will pick up the new position naturally
+    return;
+  }
+
+  if (!session || !currentPosition) return;
+
+  runSearchLoop().catch(err => {
+    console.error('[AlphaZeroWorker] Unhandled error in search loop:', err);
+    sendMessage({ type: 'error', message: `Search error: ${err}` });
+  });
 }
 
 /**
  * Handle messages from main thread
  */
-self.onmessage = async (event: MessageEvent<AnalysisWorkerMessage>) => {
+self.onmessage = async (event: MessageEvent<AlphaZeroWorkerMessage>) => {
   const msg = event.data;
 
   try {
     switch (msg.type) {
       case 'init':
-        console.log('[AnalysisWorker] Received init message');
+        console.log('[AlphaZeroWorker] Received init message');
         await initModel(msg.modelUrl);
         break;
 
-      case 'analyze':
-        console.log('[AnalysisWorker] Received analyze message');
-        // Stop any current analysis
+      case 'setPosition': {
+        // Stop current search loop
         abortAnalysis = true;
 
-        // Wait for current analysis to stop (with timeout)
+        // Wait for loop to stop
         let waitCount = 0;
-        while (isAnalyzing && waitCount < 100) {
+        while (analysisRunning && waitCount < 100) {
           await new Promise(resolve => setTimeout(resolve, 10));
           waitCount++;
         }
-        if (isAnalyzing) {
-          console.warn('[AnalysisWorker] Timeout waiting for previous analysis to stop');
-          isAnalyzing = false;
+        if (analysisRunning) {
+          console.warn('[AlphaZeroWorker] Timeout waiting for search loop to stop');
+          analysisRunning = false;
         }
 
-        // Start new analysis
-        currentPosition = msg.position;
-        currentPlayer = msg.player;
-        currentConfig = msg.config;
-        // Don't await - let it run in background
-        runAnalysis().catch(err => {
-          console.error('[AnalysisWorker] Unhandled error in runAnalysis:', err);
-          sendMessage({ type: 'error', message: `Analysis error: ${err}` });
-        });
+        setPosition(msg.position, msg.player);
+
+        // Restart the search loop
+        ensureSearchRunning();
+        break;
+      }
+
+      case 'requestMove':
+        console.log(`[AlphaZeroWorker] Move requested (${msg.numSimulations} sims)`);
+        moveRequested = true;
+        moveNumSimulations = msg.numSimulations;
+
+        // If the loop isn't running, we need to start it
+        if (!analysisRunning && currentPosition) {
+          ensureSearchRunning();
+        }
+        break;
+
+      case 'setAnalysisEnabled':
+        analysisEnabled = msg.enabled;
+        if (msg.config) {
+          analysisConfig = msg.config;
+        }
+        console.log(`[AlphaZeroWorker] Analysis ${msg.enabled ? 'enabled' : 'disabled'}`);
+
+        // If enabling and we have a position, ensure search is running
+        if (msg.enabled && currentPosition && !analysisRunning) {
+          ensureSearchRunning();
+        }
         break;
 
       case 'stop':
-        console.log('[AnalysisWorker] Received stop message');
+        console.log('[AlphaZeroWorker] Received stop message');
         abortAnalysis = true;
         break;
     }
   } catch (error) {
-    console.error('[AnalysisWorker] Error handling message:', error);
+    console.error('[AlphaZeroWorker] Error handling message:', error);
     sendMessage({ type: 'error', message: `Worker error: ${error}` });
   }
 };
 
-// Signal that worker is ready to receive messages
-console.log('[AnalysisWorker] Worker initialized');
+console.log('[AlphaZeroWorker] Worker initialized');
