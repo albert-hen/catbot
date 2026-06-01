@@ -170,10 +170,14 @@ export function useAIPlayer(
     }
   }, [gameState, service, onMove]);
 
-  // Trigger AI move when it becomes AI's turn
+  // Trigger AI move when it becomes AI's turn.
+  // Depend on both the callback AND the guard values so the effect fires
+  // when, e.g., the game starts or unpauses — even though the callback
+  // reads the latest values from guardsRef.
   useEffect(() => {
     checkAndMakeAIMove();
-  }, [checkAndMakeAIMove]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkAndMakeAIMove, gamePhase, isPaused, isAnimating, viewingHistoryIndex, isAIReady]);
 
   // Keep the worker's position in sync with the game state
   useEffect(() => {
