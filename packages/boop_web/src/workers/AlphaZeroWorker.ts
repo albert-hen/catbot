@@ -19,6 +19,7 @@ import {
   GameState,
   ACTION_SIZE,
   NUM_CHANNELS,
+  MAX_NODES,
   actionToMove,
   MoveType,
   gameStateToTensor,
@@ -30,16 +31,42 @@ import {
 const BOARD_SIZE = 6;
 const EPS = 1e-8;
 const CPUCT = 1.0;
+
 // ONNX session
 let session: ort.InferenceSession | null = null;
 
-// Persistent MCTS tree
+// Persistent MCTS tree.
+// Vs stores valid moves as a packed bitmask (1 bit per action).
 let Qsa: Map<string, number> = new Map();
 let Nsa: Map<string, number> = new Map();
 let Ns: Map<string, number> = new Map();
 let Ps: Map<string, Float32Array> = new Map();
 let Es: Map<string, number> = new Map();
-let Vs: Map<string, Float32Array> = new Map();
+let Vs: Map<string, Uint8Array> = new Map();
+
+/** Pack a valid-move array (1.0/0.0 floats) into a bitmask. */
+function packValids(valids: Float32Array): Uint8Array {
+  const packed = new Uint8Array(Math.ceil(ACTION_SIZE / 8));
+  for (let a = 0; a < ACTION_SIZE; a++) {
+    if (valids[a] > 0) packed[a >> 3] |= 1 << (a & 7);
+  }
+  return packed;
+}
+
+/** Read a single action's validity from a packed bitmask. */
+function isValid(vs: Uint8Array, a: number): boolean {
+  return (vs[a >> 3] & (1 << (a & 7))) !== 0;
+}
+
+/** Clear the entire MCTS tree. */
+function clearTree(): void {
+  Qsa.clear();
+  Nsa.clear();
+  Ns.clear();
+  Ps.clear();
+  Es.clear();
+  Vs.clear();
+}
 
 // Current position (swapped atomically by message handler)
 let currentPosition: Float32Array | null = null;
@@ -276,7 +303,7 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
     }
 
     Ps.set(s, maskedPolicy);
-    Vs.set(s, valids);
+    Vs.set(s, packValids(valids));
     Ns.set(s, 0);
 
     visited.delete(s);
@@ -291,16 +318,17 @@ async function mctsSearch(canonicalBoard: Float32Array, visited: Set<string>): P
   let bestAct = -1;
 
   for (let a = 0; a < ACTION_SIZE; a++) {
-    if (valids[a] > 0) {
+    if (isValid(valids, a)) {
       const key = `${s},${a}`;
+      const prior = ps[a];
       let u: number;
 
       if (Qsa.has(key)) {
         const q = Qsa.get(key)!;
         const nsa = Nsa.get(key)!;
-        u = q + CPUCT * ps[a] * Math.sqrt(ns) / (1 + nsa);
+        u = q + CPUCT * prior * Math.sqrt(ns) / (1 + nsa);
       } else {
-        u = CPUCT * ps[a] * Math.sqrt(ns + EPS);
+        u = CPUCT * prior * Math.sqrt(ns + EPS);
       }
 
       if (u > curBest) {
@@ -361,7 +389,7 @@ function getBestAction(): number {
   let maxVisits = -1;
 
   for (let a = 0; a < ACTION_SIZE; a++) {
-    if (valids[a] > 0) {
+    if (isValid(valids, a)) {
       const key = `${s},${a}`;
       const visits = Nsa.get(key) ?? 0;
       if (visits > maxVisits) {
@@ -433,7 +461,7 @@ function buildAnalysisResult(): AnalysisResult {
     const actions: ActionStats[] = [];
 
     for (let a = 0; a < ACTION_SIZE; a++) {
-      if (valids[a] > 0) {
+      if (isValid(valids, a)) {
         const key = `${s},${a}`;
         const nsa = Nsa.get(key) ?? 0;
         const qsa = Qsa.get(key) ?? 0;
@@ -472,7 +500,7 @@ function buildAnalysisResult(): AnalysisResult {
 
   if (valids && ns > 0) {
     for (let a = 0; a < 72; a++) {
-      if (valids[a] > 0) {
+      if (isValid(valids, a)) {
         const key = `${s},${a}`;
         const nsa = Nsa.get(key) ?? 0;
         if (nsa === 0) continue;
@@ -562,7 +590,12 @@ async function backgroundLoop(): Promise<void> {
       continue;
     }
 
-    // Background search: run a batch, yield
+    // Background search (analysis pondering). Stop adding nodes once the
+    // tree hits the memory cap — the top moves have stabilized by then.
+    if (Ns.size >= MAX_NODES) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      continue;
+    }
     for (let i = 0; i < 10; i++) {
       await mctsSearch(pos, new Set());
     }
@@ -586,6 +619,9 @@ self.onmessage = async (event: MessageEvent<AlphaZeroWorkerMessage>) => {
         currentPosition = msg.position;
         currentPlayer = msg.player;
         positionSetTime = Date.now();
+        // Clear the tree on every turn: the previous position is unreachable,
+        // so its nodes are dead weight. Keeps memory bounded to one position.
+        clearTree();
         break;
 
       case 'requestMove':
