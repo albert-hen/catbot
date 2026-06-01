@@ -4,7 +4,11 @@
  * Wrapper for ONNX Runtime Web to run the AlphaZero model in the browser.
  */
 
-import * as ort from 'onnxruntime-web';
+// Non-JSEP CPU build: the default JSEP build leaks gigabytes on WebKit 26
+// (iOS/iPadOS 26) — microsoft/onnxruntime#26827. Re-enable the JSEP import
+// below once that's fixed (faster, adds WebGPU).
+// import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 import type { NeuralNetwork } from './MCTS';
 import { ACTION_SIZE, NUM_CHANNELS } from './tensor';
 

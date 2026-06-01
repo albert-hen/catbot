@@ -6,7 +6,14 @@
  * position and requests moves/snapshots via simple messages.
  */
 
-import * as ort from 'onnxruntime-web';
+// Use the CPU-only, non-JSEP WASM build. The default `onnxruntime-web` entry
+// loads the JSEP build (WebGPU/WebNN support), which on WebKit 26 (iOS/iPadOS 26)
+// makes JavaScriptCore loop during WASM compilation and leak memory into the
+// gigabytes until iOS jetsam kills the tab — a known ORT regression, not ours
+// (microsoft/onnxruntime#26827). Once that's fixed, switch back to the JSEP
+// import below — it's faster and enables the WebGPU execution provider:
+// import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/wasm';
 import type {
   AnalysisResult,
   AlphaZeroWorkerMessage,
@@ -84,10 +91,17 @@ function sendMessage(msg: AlphaZeroWorkerResponse): void {
 async function initModel(modelUrl: string): Promise<void> {
   try {
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+    ort.env.wasm.numThreads = 1;
 
     console.log('[AlphaZeroWorker] Loading ONNX model...');
     session = await ort.InferenceSession.create(modelUrl, {
       executionProviders: ['wasm'],
+      // Without these, ORT's CPU memory arena pre-allocates a reusable buffer
+      // pool that grows per run and is never released — over tens of thousands
+      // of inferences it reached ~5 GB and iOS jetsam killed the tab. Disabling
+      // the arena and mem-pattern makes ORT free working memory after each run.
+      enableCpuMemArena: false,
+      enableMemPattern: false,
     });
     console.log('[AlphaZeroWorker] Model loaded successfully');
 
@@ -126,6 +140,16 @@ async function predict(boardState: Float32Array): Promise<{ policy: Float32Array
 
   const valueData = results.value.data as Float32Array;
   const value = valueData[0];
+
+  // Release the WASM-backed tensors. ONNX Runtime Web allocates input and
+  // output tensor buffers inside the WASM heap, which the JS GC cannot
+  // reclaim. Without disposing, every inference leaks — over the tens of
+  // thousands of predicts a full search/game makes, the heap grows into the
+  // gigabytes and iOS jetsam kills the tab. We've copied out everything we
+  // need above, so it's safe to free here.
+  inputTensor.dispose();
+  results.policy.dispose();
+  results.value.dispose();
 
   return { policy, value };
 }
@@ -587,6 +611,15 @@ async function backgroundLoop(): Promise<void> {
 
       searchingForMove = false;
       moveTargetSims = 0;
+      continue;
+    }
+
+    // Nothing to search on a terminal position: mctsSearch returns instantly,
+    // so the tree never grows and the cap guard below never fires. Without this
+    // the loop hot-spins (10 instant searches + setTimeout(0)) pinning a core
+    // and churning GC, which crashes the tab on iOS after ~30s. Idle-poll instead.
+    if (checkGameEndedFromTensor(pos) !== 0) {
+      await new Promise(resolve => setTimeout(resolve, 200));
       continue;
     }
 
