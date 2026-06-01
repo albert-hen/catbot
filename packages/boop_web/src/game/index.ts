@@ -7,5 +7,4 @@ export * from './GameState';
 export * from './tensor';
 export * from './mctsMemory';
 export * from './MCTS';
-export * from './NeuralNetwork';
 export * from './analysisTypes';
