@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import type { PlayerConfig, AIConfig, AnimationConfig, GamePhase } from '../hooks/useBoopGame';
+import { MAX_NODES } from '../game';
 import './SettingsPanel.css';
 
 interface SettingsPanelProps {
@@ -72,7 +73,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     if (gamePhase !== 'setup') return;
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value) && value > 0) {
-      onAIConfigChange({ ...aiConfig, numSimulations: value });
+      // Cap at MAX_NODES: the search tree (and thus memory) cannot exceed it.
+      onAIConfigChange({ ...aiConfig, numSimulations: Math.min(value, MAX_NODES) });
     }
   };
   
@@ -157,7 +159,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <input
               type="number"
               min="1"
-              max="1000"
+              max={MAX_NODES}
               step="10"
               value={aiConfig.numSimulations}
               onChange={handleSimulationsChange}
@@ -165,7 +167,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             />
           </label>
           <p className="config-hint">
-            More simulations = stronger play but slower
+            More simulations = stronger play but slower (max {MAX_NODES.toLocaleString()})
           </p>
           <label>
             <span>AI Move Delay (ms)</span>

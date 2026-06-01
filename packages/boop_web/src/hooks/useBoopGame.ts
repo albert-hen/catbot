@@ -123,12 +123,9 @@ export function useBoopGame(
     isAnimating,
     viewingHistoryIndex,
     handleAIMove,
-    {
-      playerConfig: options.playerConfig,
-      aiConfig: options.aiConfig,
-      animationConfig: options.animationConfig,
-      onAIThinking: options.onAIThinking,
-    },
+    options.aiConfig,
+    options.playerConfig,
+    options.onAIThinking,
   );
 
   // Detect game over

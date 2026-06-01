@@ -3,6 +3,11 @@
  *
  * Watches game state and triggers AI moves when it's AI's turn.
  * Uses the shared AlphaZeroService from context.
+ *
+ * Guard values (isPaused, isAnimating, gamePhase, etc.) are stored in refs
+ * so that checkAndMakeAIMove's dependency list stays short — it only
+ * recreates when gameState, isAIReady, or onMove actually change, not on
+ * every paint tick or pause toggle.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -17,14 +22,7 @@ import {
   MoveType,
 } from '../game';
 import { useAlphaZeroService, useAlphaZeroReady } from '../contexts/AlphaZeroContext';
-import type { PlayerConfig, AIConfig, AnimationConfig, GamePhase } from './useBoopGame';
-
-export interface UseAIPlayerOptions {
-  playerConfig: PlayerConfig;
-  aiConfig: AIConfig;
-  animationConfig: AnimationConfig;
-  onAIThinking?: (thinking: boolean) => void;
-}
+import type { PlayerConfig, AIConfig, GamePhase } from './useBoopGame';
 
 export interface AIPlayerMoveResult {
   previousState: GameState;
@@ -44,13 +42,38 @@ export function useAIPlayer(
   isAnimating: boolean,
   viewingHistoryIndex: number | null,
   onMove: (result: AIPlayerMoveResult) => void,
-  options: UseAIPlayerOptions,
+  aiConfig: AIConfig,
+  playerConfig: PlayerConfig,
+  onAIThinking?: (thinking: boolean) => void,
 ): UseAIPlayerReturn {
   const service = useAlphaZeroService();
   const isAIReady = useAlphaZeroReady();
   const [isAIThinking, setIsAIThinking] = useState(false);
   const processingRef = useRef(false);
   const generationRef = useRef(0);
+
+  // Guards stored in refs — always read the latest value without
+  // forcing checkAndMakeAIMove to recreate.
+  const guardsRef = useRef({
+    gamePhase,
+    isPaused,
+    isAnimating,
+    viewingHistoryIndex,
+    isAIReady,
+    aiConfig,
+    playerConfig,
+    onAIThinking,
+  });
+  guardsRef.current = {
+    gamePhase,
+    isPaused,
+    isAnimating,
+    viewingHistoryIndex,
+    isAIReady,
+    aiConfig,
+    playerConfig,
+    onAIThinking,
+  };
 
   const resetGeneration = useCallback(() => {
     generationRef.current++;
@@ -59,34 +82,34 @@ export function useAIPlayer(
   }, []);
 
   const checkAndMakeAIMove = useCallback(async () => {
+    const g = guardsRef.current;
     if (processingRef.current) return;
     if (gameState.gameOver) return;
-    if (gamePhase !== 'playing') return;
-    if (!isAIReady) return;
-    if (isAnimating) return;
-    if (isPaused) return;
-    if (viewingHistoryIndex !== null) return;
+    if (g.gamePhase !== 'playing') return;
+    if (!g.isAIReady) return;
+    if (g.isAnimating) return;
+    if (g.isPaused) return;
+    if (g.viewingHistoryIndex !== null) return;
 
     const currentPlayer = gameState.currentTurn;
-    const isAI = options.playerConfig[currentPlayer] === 'ai';
-    if (!isAI) return;
+    if (g.playerConfig[currentPlayer] !== 'ai') return;
 
     processingRef.current = true;
     setIsAIThinking(true);
-    options.onAIThinking?.(true);
+    g.onAIThinking?.(true);
     const gen = generationRef.current;
 
     try {
-      const delay = Math.max(100, options.aiConfig.moveDelayMs || 100);
+      const delay = Math.max(100, g.aiConfig.moveDelayMs || 100);
       await new Promise(resolve => setTimeout(resolve, delay));
 
-      if (gen !== generationRef.current || isPaused) return;
+      if (gen !== generationRef.current || g.isPaused) return;
 
       const player: 1 | -1 = currentPlayer === 'orange' ? 1 : -1;
       const action = await service.selectAction(
         gameState,
         player,
-        options.aiConfig.numSimulations
+        g.aiConfig.numSimulations
       );
 
       if (gen !== generationRef.current) return;
@@ -143,10 +166,11 @@ export function useAIPlayer(
     } finally {
       processingRef.current = false;
       setIsAIThinking(false);
-      options.onAIThinking?.(false);
+      g.onAIThinking?.(false);
     }
-  }, [gameState, isAIReady, service, options, isAnimating, isPaused, viewingHistoryIndex, gamePhase, onMove]);
+  }, [gameState, service, onMove]);
 
+  // Trigger AI move when it becomes AI's turn
   useEffect(() => {
     checkAndMakeAIMove();
   }, [checkAndMakeAIMove]);
