@@ -2,6 +2,10 @@
  * Board styles
  */
 
+.board-wrapper {
+  /* desktop: transparent pass-through; mobile media query below adds constraints */
+}
+
 .board-container {
   width: 680px;
   height: 648px;
@@ -271,32 +275,12 @@
   }
 }
 
-/* Responsive sizing */
-@media (max-width: 600px) {
-  .board-cell {
-    width: 56px;
-    height: 56px;
-  }
-  
-  .piece-img {
-    width: 42px;
-    height: 42px;
-    background-size: 84px 42px;
-  }
-  
-  .piece-img.gray-kitten,
-  .piece-img.orange-kitten,
-  .piece-img.gray-cat,
-  .piece-img.orange-cat {
-    background-size: 84px 42px;
-  }
-  
-  .piece-img.orange-kitten,
-  .piece-img.orange-cat {
-    background-position: -42px 0;
-  }
-  
-  .board-container {
-    padding: 12px;
+/* Mobile: wrapper constrains the layout, inner board stays at desktop size
+   and is uniformly scaled via JS — zero drift against the background sprite */
+@media (max-width: 900px) {
+  .board-wrapper {
+    width: min(680px, calc(100vw - 40px));
+    height: calc(min(680px, calc(100vw - 40px)) * 648 / 680);
+    overflow: hidden;
   }
 }

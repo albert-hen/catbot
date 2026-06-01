@@ -2,7 +2,7 @@
  * Boop Game - Board Component
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import type {
   Position,
   GraduationChoice,
@@ -57,6 +57,27 @@ export const Board: React.FC<BoardProps> = ({
   analysisHighlight = null,
 
 }) => {
+  // Mobile: compute uniform scale + centering offset so the grid stays
+  // locked to the background sprite (which has asymmetric borders: 32px L, 26px R)
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState<string | undefined>(undefined);
+  const GRID_CENTER = 32 + (6 * 102 + 5 * 2) / 2; // 343px from left edge of 680px container
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      if (w >= 680) { setTransform(undefined); return; }
+      const s = w / 680;
+      // center the grid in the wrapper
+      const offset = w / 2 - GRID_CENTER * s;
+      setTransform(`scale(${s}) translateX(${offset / s}px)`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const isHighlighted = (row: number, col: number): boolean => {
     return highlightedCells.some(([r, c]) => r === row && c === col);
   };
@@ -315,21 +336,26 @@ export const Board: React.FC<BoardProps> = ({
   };
 
   return (
-    <div className={`board-container ${gamePhase === 'setup' ? 'setup-phase' : ''}`}>
-      <div className="board" role="grid" aria-label="Boop game board">
-        {Array.from({ length: BOARD_SIZE }, (_, row) => (
-          <div key={row} className="board-row" role="row">
-            {Array.from({ length: BOARD_SIZE }, (_, col) => renderCell(row, col))}
-          </div>
-        ))}
-      </div>
-      {renderPolicyOverlay()}
-      {renderBoopArrows()}
-      {gamePhase === 'setup' && (
-        <div className="setup-overlay">
-          <span className="setup-overlay-text">Click Start Game</span>
+    <div className="board-wrapper" ref={wrapperRef}>
+      <div
+        className={`board-container ${gamePhase === 'setup' ? 'setup-phase' : ''}`}
+        style={transform ? { transform, transformOrigin: 'top left' } : undefined}
+      >
+        <div className="board" role="grid" aria-label="Boop game board">
+          {Array.from({ length: BOARD_SIZE }, (_, row) => (
+            <div key={row} className="board-row" role="row">
+              {Array.from({ length: BOARD_SIZE }, (_, col) => renderCell(row, col))}
+            </div>
+          ))}
         </div>
-      )}
+        {renderPolicyOverlay()}
+        {renderBoopArrows()}
+        {gamePhase === 'setup' && (
+          <div className="setup-overlay">
+            <span className="setup-overlay-text">Click Start Game</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

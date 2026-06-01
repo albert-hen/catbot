@@ -104,11 +104,17 @@
     flex-direction: column;
     align-items: center;
   }
-  
+
   .left-panel,
   .right-panel {
     width: 100%;
+    min-width: 0;
     max-width: 500px;
+  }
+
+  /* Show the board first, then controls and settings below it */
+  .game-container > .board-wrapper {
+    order: -1;
   }
 }
 

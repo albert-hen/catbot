@@ -135,6 +135,16 @@ export interface ActionStats {
 }
 
 /**
+ * Aggregate MCTS statistics for a board state.
+ */
+export interface MCTSStateStats {
+  totalVisits: number;
+  actions: ActionStats[];
+  rawPolicy: Float32Array;
+  rawValue: number;
+}
+
+/**
  * Messages sent to the AlphaZero worker
  */
 export type AlphaZeroWorkerMessage =
