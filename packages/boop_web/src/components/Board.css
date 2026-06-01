@@ -61,6 +61,7 @@
   height: 600px;
   pointer-events: none;
   z-index: 10;
+  overflow: visible;  /* so off-board arrows aren't clipped at SVG edges */
 }
 
 .boop-arrow {

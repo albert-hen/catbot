@@ -266,32 +266,42 @@ export const Board: React.FC<BoardProps> = ({
     // Cell dimensions (including gap)
     const cellWidth = 104; // 102 + 2 gap
     const cellHeight = 100; // 98 + 2 gap
-    const cellCenterOffsetX = 51; // half of 102
-    const cellCenterOffsetY = 49; // half of 98
-    
+    const cellInnerW = 102;
+    const cellInnerH = 98;
+    const centerX = cellInnerW / 2;
+    const centerY = cellInnerH / 2;
+
     return (
       <svg className="boop-arrows-overlay" aria-hidden="true">
         <defs>
           <marker
             id="arrowhead"
-            markerWidth="10"
+            markerWidth="8"
             markerHeight="7"
-            refX="9"
+            refX="3.5"
             refY="3.5"
             orient="auto"
           >
-            <polygon points="0 0, 10 3.5, 0 7" fill="#2196F3" />
+            <polygon points="0 0, 6 3.5, 0 7" fill="#2196F3" />
           </marker>
         </defs>
         {moveEffects.boops.map((boop, index) => {
-          const fromX = boop.from[1] * cellWidth + cellCenterOffsetX;
-          const fromY = boop.from[0] * cellHeight + cellCenterOffsetY;
-          
+          const fromX = boop.from[1] * cellWidth + centerX;
+          const fromY = boop.from[0] * cellHeight + centerY;
+
           if (boop.to) {
-            // Arrow to destination
-            const toX = boop.to[1] * cellWidth + cellCenterOffsetX;
-            const toY = boop.to[0] * cellHeight + cellCenterOffsetY;
-            
+            // Land just inside the destination cell, on the entry side
+            const dc = boop.to[1] - boop.from[1]; // + right, - left
+            const dr = boop.to[0] - boop.from[0]; // + down,  - up
+            const inset = 20;
+
+            const toX = boop.to[1] * cellWidth + (
+              dc > 0 ? inset : dc < 0 ? cellInnerW - inset : centerX
+            );
+            const toY = boop.to[0] * cellHeight + (
+              dr > 0 ? inset : dr < 0 ? cellInnerH - inset : centerY
+            );
+
             return (
               <line
                 key={index}
@@ -325,8 +335,6 @@ export const Board: React.FC<BoardProps> = ({
                   className="boop-arrow boop-arrow-off-board"
                   markerEnd="url(#arrowhead)"
                 />
-                {/* X mark for off-board */}
-                <text x={toX} y={toY + 5} className="boop-off-board-mark">✕</text>
               </g>
             );
           }
