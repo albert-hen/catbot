@@ -86,16 +86,17 @@
 }
 
 /* Responsive layout */
-@media (max-width: 1200px) {
+@media (max-width: 1500px) {
   .game-container {
     flex-wrap: wrap;
   }
-  
+
   .left-panel,
   .right-panel {
     width: auto;
-    min-width: 400px;
+    min-width: 360px;
     max-width: 440px;
+    flex-shrink: 1;
   }
 }
 
