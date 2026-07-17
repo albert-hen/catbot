@@ -13,6 +13,18 @@ This project provides multiple ways to play and develop AI for the Boop board ga
 
 ## Quick Start
 
+### Play in Browser against AlphaZero
+
+Check it out at [albertchen.dev/catbot](albertchen.dev/catbot)
+
+```bash
+cd packages/boop_web
+npm install
+npm run dev
+```
+
+See [packages/boop_web/README.md](packages/boop_web/README.md) for details.
+
 ### Play the Desktop Game
 
 ```bash
@@ -26,16 +38,6 @@ python -m packages.boop_pygame.main
 ```
 
 See [packages/boop_pygame/](packages/boop_pygame/) for AI opponent options and advanced usage.
-
-### Play in Browser
-
-```bash
-cd packages/boop_web
-npm install
-npm run dev
-```
-
-See [packages/boop_web/README.md](packages/boop_web/README.md) for details.
 
 ## Project Structure
 
