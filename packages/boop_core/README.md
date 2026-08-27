@@ -28,7 +28,7 @@ game.place_piece("ok", (2, 2))  # Place orange kitten at position (2, 2)
 The game operates in two modes:
 
 ```python
-STATE_WAITING_FOR_PLACEMENT        # Normal play - place a piece
+STATE_WAITING_FOR_PLACEMENT         # Normal play - place a piece
 STATE_WAITING_FOR_GRADUATION_CHOICE # Player has multiple graduation options
 ```
 
